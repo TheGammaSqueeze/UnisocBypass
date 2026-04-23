@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+.DS_Store
+backups/
+*.bin.tmp

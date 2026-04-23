@@ -1,0 +1,141 @@
+# UnisocBypass
+
+Tools and analysis for bypassing Unisoc UMS512 (T618) firmware signature verification.
+
+Developed and verified on the Anbernic RG Vita Pro, which uses the Unisoc T618 SoC.
+
+## What this does
+
+Unisoc's UMS512 secure boot chain uses a proprietary DHTB + SIMGHDR signature format. The SPL (Secondary Program Loader) performs RSA-2048 signature verification on every image it loads (sml, trustos, uboot) and hangs in an infinite loop if any check fails. There is no unlock-state bypass in the SPL code.
+
+However, the BootROM on this SoC only verifies the **DHTB SHA256 hash** (integrity check) when loading SPL from the eMMC boot partition. It does NOT verify the SIMGHDR RSA signature. This makes it possible to:
+
+1. Patch SPL to NOP out all 4 RSA verify call sites
+2. Update the DHTB hash to match the modified code
+3. Flash the patched SPL to `mmcblk0boot0` via adb root
+4. Subsequently flash any modified uboot/sml/trustos with just a hash update (no RSA re-signing needed)
+
+## Chain of trust
+
+```
+BootROM (mask ROM)
+  -> loads SPL from mmcblk0boot0
+  -> checks DHTB SHA256 hash ONLY (integrity)
+  -> does NOT verify SIMGHDR RSA signature
+    -> SPL RSA-2048 verifies sml, trustos, uboot (4 call sites)
+    -> SPL hangs in infinite loop on verification failure
+      -> UBoot AVB verifies boot, vendor_boot, dtbo
+      -> UBoot SKIPS AVB when bootloader is unlocked
+```
+
+After running `tools/patch_spl.py`:
+
+```
+BootROM loads patched SPL (DHTB hash valid)
+  -> Patched SPL has all 4 verify calls NOPed to 0xD503201F
+  -> Any sml, trustos, uboot passes verification (it is never actually checked)
+    -> UBoot loads boot chain as before
+```
+
+## Quick start
+
+Prerequisites:
+- Python 3.6+
+- `adb` with root access on the device
+- Device already bootloader-unlocked (see "Prerequisites" below)
+
+```bash
+git clone git@github.com:TheGammaSqueeze/UnisocBypass.git
+cd UnisocBypass
+
+# 1. Back up current SPL and uboot from device
+./scripts/backup.sh ./backups
+
+# 2. Patch SPL (NOP verify calls + update hash)
+python3 tools/patch_spl.py backups/mmcblk0boot0.bin patched_spl.img
+
+# 3. Flash patched SPL to both eMMC boot partitions
+./scripts/flash_spl.sh patched_spl.img
+
+# 4. Modify uboot freely (see examples/uboot_modify_example.py)
+python3 tools/rehash.py my_modified_uboot.img
+
+# 5. Flash modified uboot
+./scripts/flash_uboot.sh my_modified_uboot.img
+```
+
+## Repo layout
+
+- `tools/` - Python tools for parsing, patching, and re-hashing DHTB images
+- `scripts/` - Bash scripts for flashing and full workflow automation
+- `docs/` - Detailed analysis documentation
+- `examples/` - Stock and modified images for reference
+- `analysis/` - SPL disassembly output and reverse-engineering notes
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `tools/dhtb_parse.py` | Parse and display DHTB header + SIMGHDR fields from any signed Unisoc image |
+| `tools/patch_spl.py` | Patch SPL: NOP all 4 RSA verify call sites and update DHTB/SIMGHDR hashes |
+| `tools/rehash.py` | Recompute DHTB SHA256 + SIMGHDR data hash for any modified image |
+| `tools/verify_image.py` | Check that a DHTB image has a valid hash (integrity test) |
+| `tools/modify_uboot.py` | Replace strings in uboot and re-hash in one step |
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/backup.sh` | Dump SPL (boot0/boot1) and uboot (_a/_b) from device |
+| `scripts/flash_spl.sh` | Flash a patched SPL to both eMMC boot partitions |
+| `scripts/flash_uboot.sh` | Flash a modified uboot to both slot partitions |
+| `scripts/unpatch.sh` | Restore stock SPL from backup (recovery) |
+| `scripts/full_workflow.sh` | End-to-end: backup, patch, flash everything |
+
+## Prerequisites
+
+Your device must already be bootloader-unlocked. On Unisoc devices this typically means:
+- `ro.boot.flash.locked = 0`
+- `ro.boot.verifiedbootstate = orange`
+
+If your device is still locked, use the CVE-2022-38694 exploit:
+https://github.com/TomKing062/CVE-2022-38694_unlock_bootloader
+
+The CVE exploit temporarily loads a patched SPL in RAM to flip the lock flag in the misc partition. It does not permanently modify SPL. That's what this repo adds: **permanent** SPL verification bypass.
+
+## Supported SoCs
+
+Verified working on:
+- UMS512 / T618 (Anbernic RG Vita Pro)
+
+The DHTB + SIMGHDR format and SPL verify-call pattern is shared across Unisoc T-series SoCs, so the same approach should work on:
+- UMS312 / T310
+- UMS9230 / T606, T612, T616
+- UMS9620 / T820
+
+For other SoCs you may need to adjust the SPL verify-call pattern detection in `tools/patch_spl.py` (it currently matches `bl / cbz w0 / mov w0, #5` which is the standard T618 sequence).
+
+## Recovery if something goes wrong
+
+If a patched SPL somehow fails to boot:
+
+1. Power off the device completely
+2. Hold volume down + connect USB to enter download mode
+3. Use `spd_dump` with the CVE-2022-38694 exploit to flash the stock SPL back:
+```bash
+spd_dump --wait 300 exec_addr 0x3ee8 \
+  fdl fdl1-dl.bin 0x5500 \
+  fdl fdl2-dl.bin 0x9efffe00 \
+  exec w splloader stock_spl.img w splloader_bak stock_spl.img poweroff
+```
+
+**Important:** Always keep a stock SPL backup. `scripts/backup.sh` creates one automatically.
+
+## Credits
+
+- NCC Group for the original CVE-2022-38694 BootROM vulnerability research: https://research.nccgroup.com/2022/09/02/theres-another-hole-in-your-soc-unisoc-rom-vulnerabilities/
+- TomKing062 for the Unisoc unlock tool: https://github.com/TomKing062/CVE-2022-38694_unlock_bootloader
+
+## License
+
+MIT - see LICENSE file.
