@@ -4,7 +4,7 @@ Full reverse-engineering walkthrough of how Unisoc UMS512 SPL verifies each imag
 
 ## Environment
 
-- Binary: stock SPL dump from Anbernic RG Vita Pro (UMS512 / T618)
+- Binary: stock SPL dump from Anbernic RG Vita (UMS512 / T618)
 - Disassembler: `aarch64-linux-gnu-objdump -D -b binary -m aarch64`
 - SPL code base address: 0 (BootROM strips DHTB header before execution)
 

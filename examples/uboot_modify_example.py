@@ -2,7 +2,7 @@
 """
 Example: modify a stock uboot by masking the unlock-status strings with "1"
 characters, then re-hash. This reproduces exactly the modification that was
-validated booting on a Vita Pro.
+validated booting on an RG Vita.
 
 Usage:
     python3 uboot_modify_example.py <stock_uboot.img> <output.img>

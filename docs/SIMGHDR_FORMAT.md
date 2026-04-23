@@ -41,7 +41,7 @@ Empirically, it is also read by the SPL verify code path (see `tools/patch_spl.p
 
 ## Key identification
 
-Two distinct signing keys are used across the Vita Pro firmware:
+Two distinct signing keys are used across the Vita firmware:
 
 | Key | Modulus prefix | Images signed |
 |-----|---------------|---------------|

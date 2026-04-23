@@ -2,7 +2,7 @@
 
 Tools and analysis for bypassing Unisoc UMS512 (T618) firmware signature verification.
 
-Developed and verified on the Anbernic RG Vita Pro, which uses the Unisoc T618 SoC.
+Developed and verified on the Anbernic RG Vita, which uses the Unisoc T618 SoC.
 
 ## What this does
 
@@ -111,7 +111,7 @@ The CVE exploit temporarily loads a patched SPL in RAM to flip the lock flag in 
 ## Supported SoCs
 
 Verified working on:
-- UMS512 / T618 (Anbernic RG Vita Pro)
+- UMS512 / T618 (Anbernic RG Vita)
 
 The DHTB + SIMGHDR format and SPL verify-call pattern is shared across Unisoc T-series SoCs, so the same approach should work on:
 - UMS312 / T310
