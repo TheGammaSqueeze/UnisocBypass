@@ -75,6 +75,17 @@ adb reboot
 - `docs/` - Detailed analysis documentation
 - `examples/` - Stock and modified images for reference
 - `analysis/` - SPL disassembly output and reverse-engineering notes
+- `fdl/` - Unsigned FDL files for flashing on locked devices via `spd_dump`
+
+## Documentation index
+
+- [docs/WORKFLOW.md](docs/WORKFLOW.md) - step-by-step usage
+- [docs/ANALYSIS.md](docs/ANALYSIS.md) - SPL RSA verify reverse-engineering
+- [docs/CHAIN_OF_TRUST.md](docs/CHAIN_OF_TRUST.md) - boot-chain signing model
+- [docs/DHTB_FORMAT.md](docs/DHTB_FORMAT.md) - DHTB header layout
+- [docs/SIMGHDR_FORMAT.md](docs/SIMGHDR_FORMAT.md) - SIMGHDR signature block layout
+- [docs/UBOOT_UNLOCK.md](docs/UBOOT_UNLOCK.md) - uboot permanent-unlock patch
+- [docs/OC_FEASIBILITY.md](docs/OC_FEASIBILITY.md) - CPU/GPU overclock feasibility assessment
 
 ## Tools
 
@@ -99,14 +110,19 @@ adb reboot
 
 ## Prerequisites
 
-Your device must already be bootloader-unlocked. On Unisoc devices this typically means:
-- `ro.boot.flash.locked = 0`
-- `ro.boot.verifiedbootstate = orange`
+You do **not** need an unlocked bootloader. The patched images work on both locked and unlocked devices, though the installation method differs.
 
-If your device is still locked, use the CVE-2022-38694 exploit:
-https://github.com/TomKing062/CVE-2022-38694_unlock_bootloader
+**Option A - device already has adb root (unlocked or engineering build)**
 
-The CVE exploit temporarily loads a patched SPL in RAM to flip the lock flag in the misc partition. It does not permanently modify SPL. That's what this repo adds: **permanent** SPL verification bypass.
+Use `scripts/flash_spl.sh` and `scripts/flash_uboot.sh`, which write to eMMC via `adb shell dd`.
+
+**Option B - stock locked device**
+
+Use `spd_dump` with the included FDL files in `fdl/` to flash while the BootROM exploit (CVE-2022-38694) is active. See `fdl/README.md` for the exact command. No prior unlock is required.
+
+After the patched SPL + patched uboot are installed (via either method), the device permanently reports as unlocked on every boot, and all downstream signature checks are skipped.
+
+On first boot after switching from a locked stock state, Android detects the verified-boot-state change (green -> orange) and wipes userdata. This is standard Android behavior, not specific to these patches.
 
 ## Supported SoCs
 
