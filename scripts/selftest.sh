@@ -64,10 +64,16 @@ python3 examples/uboot_modify_example.py examples/uboot_stock.img "$TMP/uboot_ex
 check "example uboot matches reference" byte_equal "$TMP/uboot_ex.img" examples/uboot_modified.img
 
 echo
-echo "[6/6] rehash.py roundtrip"
+echo "[6/7] rehash.py roundtrip"
 cp examples/uboot_stock.img "$TMP/roundtrip.img"
 python3 tools/rehash.py "$TMP/roundtrip.img" >/dev/null
 check "rehash produces same bytes on unmodified" byte_equal "$TMP/roundtrip.img" examples/uboot_stock.img
+
+echo
+echo "[7/7] patch_uboot_unlock.py produces byte-exact output"
+python3 tools/patch_uboot_unlock.py examples/uboot_stock.img "$TMP/uboot_unlocked.img" >/dev/null
+check "fully-unlocked uboot matches reference" byte_equal "$TMP/uboot_unlocked.img" examples/uboot_unlocked.img
+check "fully-unlocked uboot hash valid" python3 tools/verify_image.py "$TMP/uboot_unlocked.img"
 
 echo
 echo "=== Results: $pass passed, $fail failed ==="

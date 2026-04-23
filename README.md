@@ -57,11 +57,15 @@ python3 tools/patch_spl.py backups/mmcblk0boot0.bin patched_spl.img
 # 3. Flash patched SPL to both eMMC boot partitions
 ./scripts/flash_spl.sh patched_spl.img
 
-# 4. Modify uboot freely (see examples/uboot_modify_example.py)
-python3 tools/rehash.py my_modified_uboot.img
+# 4a. Patch uboot for permanent unlock + AVB disabled + no SKIP VERIFY text/delay
+python3 tools/patch_uboot_unlock.py backups/uboot_b.bin unlocked_uboot.img
+./scripts/flash_uboot.sh unlocked_uboot.img
 
-# 5. Flash modified uboot
-./scripts/flash_uboot.sh my_modified_uboot.img
+# 4b. Or modify uboot freely and rehash (see examples/uboot_modify_example.py)
+# python3 tools/rehash.py my_modified_uboot.img
+# ./scripts/flash_uboot.sh my_modified_uboot.img
+
+adb reboot
 ```
 
 ## Repo layout
@@ -81,6 +85,7 @@ python3 tools/rehash.py my_modified_uboot.img
 | `tools/rehash.py` | Recompute DHTB SHA256 + SIMGHDR data hash for any modified image |
 | `tools/verify_image.py` | Check that a DHTB image has a valid hash (integrity test) |
 | `tools/modify_uboot.py` | Replace strings in uboot and re-hash in one step |
+| `tools/patch_uboot_unlock.py` | Patch uboot to permanently report unlocked, disable AVB, strip SKIP VERIFY text + delay |
 
 ## Scripts
 
