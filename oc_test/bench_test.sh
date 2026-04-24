@@ -94,13 +94,18 @@ done
 P0_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq 2>/dev/null || echo 2002000)
 P6_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy6/cpuinfo_max_freq 2>/dev/null || echo 2002000)
 echo "P0_MAX=$P0_MAX P6_MAX=$P6_MAX" >> "$EVENTS"
+# GPU max/min dynamically
+GPU_FREQS_ALL=$(cat $GPU_DEV/available_frequencies)
+GPU_MAX=$(echo $GPU_FREQS_ALL | tr ' ' '\n' | sort -n | tail -1)
+GPU_MIN=$(echo $GPU_FREQS_ALL | tr ' ' '\n' | sort -n | head -1)
+echo "GPU_MAX=$GPU_MAX GPU_MIN=$GPU_MIN" >> "$EVENTS"
 
 case "$MODE" in
     cpu)
         # CPUs at max, GPU at min idle
         echo performance > $GPU_DEV/governor 2>/dev/null || true
-        echo 384000000 > $GPU_DEV/min_freq
-        echo 384000000 > $GPU_DEV/max_freq
+        echo $GPU_MIN > $GPU_DEV/min_freq
+        echo $GPU_MIN > $GPU_DEV/max_freq
         echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
         echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
         echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
@@ -116,8 +121,8 @@ case "$MODE" in
     gpu)
         # GPU at max, CPUs at min idle
         echo performance > $GPU_DEV/governor 2>/dev/null || true
-        echo 850000000 > $GPU_DEV/min_freq
-        echo 850000000 > $GPU_DEV/max_freq
+        echo $GPU_MAX > $GPU_DEV/min_freq
+        echo $GPU_MAX > $GPU_DEV/max_freq
         echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
         echo 614400 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
         echo 614400 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
@@ -128,8 +133,8 @@ case "$MODE" in
         ;;
     both)
         echo performance > $GPU_DEV/governor 2>/dev/null || true
-        echo 850000000 > $GPU_DEV/min_freq
-        echo 850000000 > $GPU_DEV/max_freq
+        echo $GPU_MAX > $GPU_DEV/min_freq
+        echo $GPU_MAX > $GPU_DEV/max_freq
         echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
         echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
         echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq

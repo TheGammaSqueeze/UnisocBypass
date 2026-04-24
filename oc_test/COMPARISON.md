@@ -133,6 +133,14 @@ Config: CPU LITTLE/BIG UV -37.5 mV across all OPPs, GPU UV -25 mV across all OPP
 | gpu | 128 | 850 | 0% | 68.5 | 761 | 800 | 0.00 | 16.23 | GPU perf -0.3%, SoC +2.6C, vddgpu +1mV |
 | both | 76 | 458 | 84% | 105.0 | 1009 | 714 | 60.45 | 8.23 | CPU ~0%, FPS +1.4%, SoC -0.8C |
 
+## 020-gpu-oc900
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 71 | 384 | 100% | 106.3 | 1050 | 700 | 57.23 | 0.00 | CPU perf -14.0%, SoC +1.3C, vddcpu +0mV |
+| gpu | 101 | 900 | 0% | 63.6 | 756 | 800 | 0.00 | 14.93 | GPU perf -8.2%, SoC -2.3C, vddgpu +1mV |
+| both | 68 | 458 | 86% | 105.5 | 1050 | 712 | 56.68 | 8.09 | CPU -6.2%, FPS -0.4%, SoC -0.3C |
+
 ## Conclusions (running)
 
 - **CPU UV lands on hardware.** vddcpu tracks the DT voltage reduction (minus AVS adjustment).
