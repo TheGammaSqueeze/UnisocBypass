@@ -16,8 +16,16 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 
 ## Comparison table
 
+**Current baseline: exp 025** (CPU UV -37.5 mV + CPU OC 2100 MHz + GPU OC 900 MHz, stock voltage targets, stock thermal trips). See `experiments/025-cpu2100-uv37.5-gpu900/`.
+
 | # | date | dtb config | mode | samples | CPU avg MHz | GPU avg MHz | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | notes |
 |---|------|-----------|------|-------:|------------:|------------:|-----------:|----------:|----------:|--------:|--------:|-------|
+| **025-cpu** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | cpu | 109 | 2100 | 384 | 102.1 | 1050 | 700 | 78.9 | 0.00 | **BASELINE** +18.6% CPU |
+| **025-gpu** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | gpu | 129 | 1228 | 900 | 63.1 | 719 | 799 | 0.0 | 16.26 | **BASELINE** +17% FPS vs stock 850 MHz |
+| **025-both** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | both | 70 | 2100 | 472 | 105.0 | 1050 | 717 | 57.7 | 8.21 | **BASELINE** -0.8 C vs stock |
+| 024-gpu | 2026-04-24 | GPU 900 MHz + mali-supply only (no shadercores) | gpu | 130 | 1228 | 900 | 64.4 | 756 | 800 | 0.0 | 16.25 | cap still 800 mV, mali-supply alone didn't help |
+| 023-gpu | 2026-04-24 | GPU 900 MHz + mali-supply + shadercores-supply | gpu | 128 | 1228 | 900 | 64.4 | 756 | 800 | 0.0 | 16.26 | cap still 800 mV |
+| 022 (partial) | 2026-04-24 | GPU 900 MHz + operating-points volt 1000 mV | ad-hoc | - | - | 900 | - | - | 800 | - | - | definitive: even 1000 mV DT request, rail stuck at 800 mV |
 | 021-cpu | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | cpu | 98 | 2002 | 384 | 102.4 | 1050 | 700 | 73.2 | 0.00 | iteration step (CPU unchanged) |
 | 021-gpu | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | gpu | 129 | 1228 | 900 | 64.7 | 756 | 800 | 0.0 | 16.23 | Mali logs volt=850000, rail clamped at 800 mV |
 | 021-both | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | both | 66 | 2002 | 452 | 105.5 | 1050 | 712 | 56.1 | 8.07 | DT OV rejected at HW DVFS layer |
@@ -44,18 +52,20 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 | brick-02 | GPU UV -50 mV all OPPs | no boot (voltage too aggressive or tables mismatched) |
 | brick-03 | in-place DTB replace (no `android_boot_image_editor` repack) | no boot (header field or AVB footer integrity) |
 
-## Key findings so far
+## Key findings (updated 2026-04-24 post exp 025)
 
-1. **CPU voltage responds to DTB changes.** UV applied in the `operating-points-T618-tt` table reaches the SC2730 DCDC_CPU regulator via the standard Linux regulator framework. Verified in exp 004: vddcpu @ 2002 MHz dropped from stock 1009-1050 mV to 1025 mV when DT was changed from 1050 to 1025.
-2. **GPU voltage does NOT respond to DTB changes, and exp 021 pinpoints why.** The Mali driver reads `operating-points` voltage and calls `regulator_set_voltage(850000)` when the DT asks for 850 mV (confirmed via Mali dmesg: `volt=850000` in `kbase_platform_set_freq_volt`). But the HW DVFS mechanism writing to `dvfs_index_cfg` + `core_indexN_map` autonomously sets vddgpu per its own voltage grade table, overriding the software regulator request. Rail stays at 800 mV for the top OPP regardless of DT.
-3. **GPU freq DOES respond to DT.** Exp 020 raised the top OPP from 850 to 900 MHz via operating-points/sprd,dvfs-lists and the GPU ran at 900 MHz under load. So freq-only OC works; voltage changes require kernel patching.
-4. **Kernel patch target**: either `core_indexN_map` register values in DT (which drive PMIC writes), or the voltage grade table in `sprd-hwdvfs-policy.ko` / `sprd-hwdvfs-ums512-arch.ko` (strings: `TOP_DVFS_VOL_GRADE_TBL`, `ums512_volt_grades_tbl`, `sprd_voltage_grade_value_update`).
-5. **Stock vddcpu runtime ~= stock DT voltage** - no AVS floor; rail follows DT. Earlier "1009 mV" readings were just averaging across 1009/1050 mV transitions between freq changes.
-6. **Safe UV range**: CPU UV -37.5 mV verified stable in exp 008/014. GPU UV via DT is a no-op.
-7. **Thermal envelope during `both` torture is dominated by CPU power.** GPU-only tests stay under 70 C. CPU-only tests hit 106 C. Combined tests still hit 106 C with heavy GPU throttling.
+1. **CPU UV via DT DOES apply.** UV in `operating-points-T618-tt` reaches DCDC_CPU via the regulator framework. -37.5 mV verified stable in exp 008/014 (3x reproducibility). -25, -50, -62.5, -75, -87.5, -100 mV all tested; -37.5 is the sweet spot for thermal gain without instability.
+2. **CPU OVERVOLT above ~1050 mV does NOT apply.** Exp 019 asked for 1075 mV at 2100 MHz; rail still reads 1009-1050 mV. The ceiling is the stock top voltage for this chip bin.
+3. **CPU OC to 2100 MHz is stable at stock voltage.** Exp 019 and exp 025 ran it stably in all 3 modes. No overvolt needed because none applies anyway.
+4. **GPU voltage changes via DT do NOT apply.** Rail hard-capped at 800 mV regardless of DT request. Verified with 850 mV (exp 021), 1000 mV (exp 022), and with / without mali-supply/shadercores-supply DT injection (exp 023, 024).
+5. **Mali driver DOES read DT voltage** (`dmesg` shows `volt=850000` in the transition log) but the rail stays at 800 mV. Between `dev_pm_opp_get_voltage()` and the SC2730 vsel register, something discards the change. The exact mechanism is unidentified; likely boot-time PMIC programming in SPL or ATF.
+6. **GPU voltage bypass exists**: writing to `/sys/kernel/debug/DCDC_GPU/voltage` calls `set_voltage_sel_regmap` directly and succeeds. Rail holds at 850 mV across Mali OPP transitions. Would require a userspace daemon to ship.
+7. **GPU freq via DT DOES apply.** 900 MHz confirmed under load in exp 020 and exp 025, +17% FPS vs stock 850 MHz.
+8. **Thermal trip DT changes crash the thermal framework.** Exp 015 (115 C trip) and exp 017 (109 C trip) both crashed even at stock frequencies. Keep trips stock.
+9. **Adding extra CPU OPPs bricks boot.** Safer to REPLACE the top OPP freq in place (e.g., 2002 -> 2100) than to add a new row.
 
 ## Planned next
 
-- **Patch GPU voltage path in kernel**: locate hw_index-to-voltage binding in `sprd-hwdvfs-policy.ko` (strings point to `TOP_DVFS_VOL_GRADE_TBL`, `ums512_volt_grades_tbl`, `sprd_voltage_grade_value_update`, `default_dcdc_volt_update`). Target: raise voltage grade 4 (top OPP) from 800 to 850 mV, enabling stable 950+ MHz OC.
-- **Patch CPU voltage path**: the CPU uses a separate `sprd-hwdvfs-ums512-arch.ko` with cluster tables (`lit_core_cluster_tbl_T618_tt`, `big_core_cluster_tbl_T618_tt`). Adding a 2100+ MHz entry requires extending these tables, not just operating-points.
-- Re-check vendor_boot/SPL for voltage grade registers programmed at boot (unlikely per earlier SPL RE, but worth confirming).
+- **Push CPU higher** (2150, 2200 MHz) without overvolt (it doesn't apply anyway) to find the stability ceiling at stock 1050 mV.
+- **Push GPU higher** via DT freq increase + userspace voltage override (write to `/sys/kernel/debug/DCDC_GPU/voltage`) as part of the OS init. Test 950, 1000 MHz with 850 mV forced.
+- **SPL / ATF RE pass** to locate where PMIC voltage grade values are programmed at boot (only remaining candidate for a proper kernel-side voltage ceiling fix).

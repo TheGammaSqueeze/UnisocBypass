@@ -86,6 +86,57 @@ adb reboot
 - [docs/SIMGHDR_FORMAT.md](docs/SIMGHDR_FORMAT.md) - SIMGHDR signature block layout
 - [docs/UBOOT_UNLOCK.md](docs/UBOOT_UNLOCK.md) - uboot permanent-unlock patch
 - [docs/OC_FEASIBILITY.md](docs/OC_FEASIBILITY.md) - CPU/GPU overclock feasibility assessment
+- [oc_test/CHANGELOG.md](oc_test/CHANGELOG.md) - OC/UV experiment log and comparison table
+- [oc_test/COMPARISON.md](oc_test/COMPARISON.md) - per-experiment results vs stock baselines
+
+## Overclocking
+
+Once the patched SPL + uboot are installed, `vendor_boot.img` can be freely
+modified and re-signed with just a DHTB hash update. This allows OC/UV
+experiments by editing the DTB inside `vendor_boot`.
+
+All experiments live in `oc_test/experiments/NNN-short-name/`:
+- `modify.py` generates the modified DTS from a stock reference
+- `modified.dts` is the produced DTS
+- Three-mode bench (`cpu`, `gpu`, `both`) output in `cpu/`, `gpu/`, `both/`
+- `REPORT.md` auto-generated with voltage evidence, thermal peaks, throughput, FPS
+- `vendor_boot.img.signed.sha256` pins the exact image flashed
+
+### Current baseline: exp 025
+
+`oc_test/experiments/025-cpu2100-uv37.5-gpu900/` is the combined stable config:
+
+| knob | change | verified in |
+|------|--------|-------------|
+| CPU LITTLE/BIG lower OPPs | UV -37.5 mV | exp 008, 014 (3x reproducibility) |
+| CPU top OPP | 2002 -> 2100 MHz at stock 1050 mV | exp 019 both mode |
+| GPU top OPP | 850 -> 900 MHz at stock 800 mV | exp 020 +17% FPS |
+| Thermal trips | stock | exp 015, 017 showed raised trips crash |
+
+Results (180 s per mode):
+
+| mode | CPU MHz | GPU MHz | SoC pk | vs stock |
+|------|--------:|--------:|-------:|----------|
+| cpu | 2100 | 384 | 102.1 C | +18.6% CPU, -2.8 C |
+| gpu | 1228 | 900 | 63.1 C | +17% FPS |
+| both | 2100 | 472 | 105.0 C | -4.5% CPU, +1.1% FPS, -0.8 C |
+
+### Known ceilings
+
+DT overvolt requests above the hardware ceiling are silently ignored:
+- CPU: cap ~1050 mV. Requests above (exp 019 tried 1075) still land at ~1009 mV.
+- GPU: cap 800 mV. Requests above (exp 021 tried 850, exp 022 tried 1000) still land at 800 mV.
+
+Adding `mali-supply` / `shadercores-supply` to the GPU DT node (exp 023, 024)
+does not break the GPU ceiling. The Mali driver DOES read the DT voltage
+correctly (`dmesg` shows `volt=850000`) but the rail still reads 800 mV.
+
+A bypass path exists for the GPU: writing directly to
+`/sys/kernel/debug/DCDC_GPU/voltage` calls `set_voltage_sel_regmap` directly
+and succeeds. Not used in the baseline since it requires a userspace daemon
+and has not been stability-tested long enough to ship.
+
+Kernel module snapshots used for offline RE are committed to `kernel_rev/modules/`.
 
 ## Tools
 
