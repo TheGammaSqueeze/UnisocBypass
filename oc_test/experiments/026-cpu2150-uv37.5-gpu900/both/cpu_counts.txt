@@ -1,0 +1,8 @@
+cpu0_kbytes=5775360
+cpu1_kbytes=6320128
+cpu2_kbytes=6430720
+cpu3_kbytes=7421952
+cpu4_kbytes=5967872
+cpu5_kbytes=6148096
+cpu6_kbytes=16855040
+cpu7_kbytes=7303168

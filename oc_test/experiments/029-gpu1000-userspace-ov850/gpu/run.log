@@ -1,0 +1,6 @@
+==> bench mode=gpu duration=180s
+==> pre-test OPP voltage sweep
+mode=gpu cpu0=614400 cpu6=1228800 gpu=1000000000
+==> starting GPU stress
+==> stopping stressors
+==> done mode=gpu

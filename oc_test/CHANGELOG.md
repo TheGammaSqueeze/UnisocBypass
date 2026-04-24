@@ -20,6 +20,18 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 
 | # | date | dtb config | mode | samples | CPU avg MHz | GPU avg MHz | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | notes |
 |---|------|-----------|------|-------:|------------:|------------:|-----------:|----------:|----------:|--------:|--------:|-------|
+| 029-cpu | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 1000 + userspace OV 850 mV | cpu | 72 | 2100 | 384 | 105.8 | 1050 | 844 | 57.6 | 0.00 | GPU idle rail elevated by override |
+| 029-gpu | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 1000 + userspace OV 850 mV | gpu | 127 | 1228 | 1000 | 71.4 | 762 | 848 | 0.0 | 16.23 | stable; FPS flat vs 900/950 (bench saturated) |
+| 029-both | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 1000 + userspace OV 850 mV | both | 63 | 2100 | 472 | 107.1 | 1050 | 837 | 54.0 | 7.94 | -10.7% CPU, -2.3% FPS vs baseline |
+| 028-cpu | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 950 + userspace OV 850 mV | cpu | 76 | 2100 | 384 | 105.8 | 1050 | 844 | 60.1 | 0.00 | same pattern as 029 |
+| 028-gpu | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 950 + userspace OV 850 mV | gpu | 127 | 1228 | 950 | 75.0 | 762 | 854 | 0.0 | 16.22 | stable; +12 C vs 900 for 0% FPS gain |
+| 028-both | 2026-04-25 | CPU UV -37.5 + 2100 + GPU 950 + userspace OV 850 mV | both | 61 | 2100 | 458 | 109.9 | 1050 | 834 | 54.2 | 7.96 | -10.3% CPU, -2.0% FPS vs baseline |
+| 027-cpu | 2026-04-25 | CPU UV -37.5 + 2200 + GPU 900 | cpu | 84 | 2200 | 384 | 106.0 | 1050 | 700 | 66.2 | 0.00 | **REGRESSION** -0.5% CPU vs stock |
+| 027-gpu | 2026-04-25 | CPU UV -37.5 + 2200 + GPU 900 | gpu | 129 | 1228 | 900 | 67.2 | 761 | 799 | 0.0 | 16.27 | unchanged |
+| 027-both | 2026-04-25 | CPU UV -37.5 + 2200 + GPU 900 | both | 64 | 2200 | 457 | 107.8 | 1050 | 712 | 56.9 | 8.05 | **REGRESSION** -5.8% CPU vs stock |
+| 026-cpu | 2026-04-25 | CPU UV -37.5 + 2150 + GPU 900 | cpu | 110 | 2150 | 384 | 100.9 | 1050 | 700 | 78.7 | 0.00 | +18.3% CPU, -4.1 C |
+| 026-gpu | 2026-04-25 | CPU UV -37.5 + 2150 + GPU 900 | gpu | 129 | 1228 | 900 | 62.3 | 719 | 800 | 0.0 | 16.25 | unchanged |
+| 026-both | 2026-04-25 | CPU UV -37.5 + 2150 + GPU 900 | both | 75 | 2150 | 467 | 105.3 | 1050 | 715 | 59.3 | 8.23 | slight gain over 025 |
 | **025-cpu** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | cpu | 109 | 2100 | 384 | 102.1 | 1050 | 700 | 78.9 | 0.00 | **BASELINE** +18.6% CPU |
 | **025-gpu** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | gpu | 129 | 1228 | 900 | 63.1 | 719 | 799 | 0.0 | 16.26 | **BASELINE** +17% FPS vs stock 850 MHz |
 | **025-both** | 2026-04-24 | CPU UV -37.5 + CPU OC 2100 + GPU OC 900 | both | 70 | 2100 | 472 | 105.0 | 1050 | 717 | 57.7 | 8.21 | **BASELINE** -0.8 C vs stock |
@@ -64,8 +76,10 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 8. **Thermal trip DT changes crash the thermal framework.** Exp 015 (115 C trip) and exp 017 (109 C trip) both crashed even at stock frequencies. Keep trips stock.
 9. **Adding extra CPU OPPs bricks boot.** Safer to REPLACE the top OPP freq in place (e.g., 2002 -> 2100) than to add a new row.
 
-## Planned next
+## Planned next (after exp 026-029)
 
-- **Push CPU higher** (2150, 2200 MHz) without overvolt (it doesn't apply anyway) to find the stability ceiling at stock 1050 mV.
-- **Push GPU higher** via DT freq increase + userspace voltage override (write to `/sys/kernel/debug/DCDC_GPU/voltage`) as part of the OS init. Test 950, 1000 MHz with 850 mV forced.
-- **SPL / ATF RE pass** to locate where PMIC voltage grade values are programmed at boot (only remaining candidate for a proper kernel-side voltage ceiling fix).
+- CPU ladder tested 2002/2100/2150/2200. 2100 is the sweet spot, 2150 matches it, 2200 is a regression. CPU ceiling is thermal, not electrical. No further CPU OC to pursue.
+- GPU ladder tested 850/900/950/1000 MHz. 900 MHz is the sweet spot by a clear margin. 950 and 1000 MHz are stable (with or without userspace override) but provide 0 measurable FPS gain (gpu_stress shader saturates) and cost significant thermal headroom in all modes, making both-mode WORSE than exp 025.
+- Userspace GPU voltage override via `/sys/kernel/debug/DCDC_GPU/voltage` confirmed as a real bypass path but not worth shipping as a daemon.
+- Definitive baseline: exp 025 (CPU UV -37.5 + CPU 2100 + GPU 900, stock voltages, stock trips).
+- Only remaining angle for breaking the voltage ceiling is SPL / ATF RE to find where PMIC voltage grade values are programmed at boot. Not currently pursued.
