@@ -149,6 +149,28 @@ Config: CPU LITTLE/BIG UV -37.5 mV across all OPPs, GPU UV -25 mV across all OPP
 | gpu | 129 | 900 | 0% | 64.7 | 756 | 800 | 0.00 | 16.23 | GPU perf -0.3%, SoC -1.3C, vddgpu +1mV |
 | both | 66 | 452 | 87% | 105.5 | 1050 | 712 | 56.05 | 8.07 | CPU -7.2%, FPS -0.6%, SoC -0.3C |
 
+## 022-gpu-oc900-ov1000
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| (no results yet) |
+
+## 023-gpu-oc900-mali-supply
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 109 | 384 | 100% | 102.1 | 1009 | 700 | 80.76 | 0.00 | CPU perf +21.4%, SoC -2.8C, vddcpu -41mV |
+| gpu | 128 | 900 | 0% | 64.4 | 756 | 800 | 0.00 | 16.26 | GPU perf ~0%, SoC -1.6C, vddgpu +1mV |
+| both | 77 | 451 | 89% | 105.8 | 1050 | 710 | 63.82 | 13.81 | CPU +5.7%, FPS +70.1%, SoC -0.0C |
+
+## 024-gpu-oc900-mali-only
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 93 | 384 | 100% | 106.0 | 1009 | 700 | 72.77 | 0.00 | CPU perf +9.4%, SoC +1.0C, vddcpu -41mV |
+| gpu | 129 | 900 | 0% | 69.0 | 762 | 799 | 0.00 | 16.25 | GPU perf -0.1%, SoC +3.0C, vddgpu +0mV |
+| both | 62 | 434 | 90% | 108.1 | 1050 | 788 | 56.52 | 8.45 | CPU -6.4%, FPS +4.0%, SoC +2.3C |
+
 ## Conclusions (running)
 
 - **CPU UV lands on hardware.** vddcpu tracks the DT voltage reduction (minus AVS adjustment).
