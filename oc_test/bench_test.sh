@@ -90,6 +90,11 @@ for p in policy0 policy6; do
 done
 
 # ---- Configure clocks for the selected mode ----
+# Determine per-policy max freq dynamically (supports OC DTBs without editing the script).
+P0_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy0/cpuinfo_max_freq 2>/dev/null || echo 2002000)
+P6_MAX=$(cat /sys/devices/system/cpu/cpufreq/policy6/cpuinfo_max_freq 2>/dev/null || echo 2002000)
+echo "P0_MAX=$P0_MAX P6_MAX=$P6_MAX" >> "$EVENTS"
+
 case "$MODE" in
     cpu)
         # CPUs at max, GPU at min idle
@@ -97,15 +102,15 @@ case "$MODE" in
         echo 384000000 > $GPU_DEV/min_freq
         echo 384000000 > $GPU_DEV/max_freq
         echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed 2>/dev/null || true
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_fix_freq 2>/dev/null || true
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed 2>/dev/null || true
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_fix_freq 2>/dev/null || true
         echo userspace > /sys/devices/system/cpu/cpufreq/policy6/scaling_governor
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_setspeed 2>/dev/null || true
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_fix_freq 2>/dev/null || true
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_setspeed 2>/dev/null || true
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_fix_freq 2>/dev/null || true
         RUN_CPU_STRESS=1; RUN_GPU_STRESS=0
         ;;
     gpu)
@@ -126,15 +131,15 @@ case "$MODE" in
         echo 850000000 > $GPU_DEV/min_freq
         echo 850000000 > $GPU_DEV/max_freq
         echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed 2>/dev/null || true
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_fix_freq 2>/dev/null || true
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed 2>/dev/null || true
+        echo $P0_MAX > /sys/devices/system/cpu/cpufreq/policy0/scaling_fix_freq 2>/dev/null || true
         echo userspace > /sys/devices/system/cpu/cpufreq/policy6/scaling_governor
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_setspeed 2>/dev/null || true
-        echo 2002000 > /sys/devices/system/cpu/cpufreq/policy6/scaling_fix_freq 2>/dev/null || true
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_max_freq
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_min_freq
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_setspeed 2>/dev/null || true
+        echo $P6_MAX > /sys/devices/system/cpu/cpufreq/policy6/scaling_fix_freq 2>/dev/null || true
         RUN_CPU_STRESS=1; RUN_GPU_STRESS=1
         ;;
     *)
@@ -144,6 +149,12 @@ esac
 
 echo userspace > /sys/class/devfreq/scene-frequency/governor 2>/dev/null || true
 echo 1866 > /sys/class/devfreq/scene-frequency/userspace/set_freq 2>/dev/null || true
+
+# Raise soc thermal trip@1 (writable at runtime). Kernel resets this on boot so
+# re-apply before every stress run. Matches DT target for experiments with raised trips.
+if [ -r /sys/class/thermal/thermal_zone1/trip_point_1_temp ]; then
+    true # no trip override; DTB holds default
+fi
 
 sleep 1
 echo "mode=$MODE cpu0=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq) cpu6=$(cat /sys/devices/system/cpu/cpufreq/policy6/scaling_cur_freq) gpu=$(cat $GPU_DEV/cur_freq)" | tee -a "$EVENTS"

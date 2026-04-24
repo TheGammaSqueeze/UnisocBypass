@@ -94,6 +94,45 @@ Config: CPU LITTLE/BIG UV -37.5 mV across all OPPs, GPU UV -25 mV across all OPP
 | gpu | 129 | 850 | 0% | 67.2 | 757 | 799 | 0.00 | 16.26 | GPU perf ~0%, SoC +1.3C, vddgpu +0mV |
 | both | 81 | 479 | 80% | 104.7 | 950 | 719 | 62.53 | 8.44 | CPU +3.5%, FPS +3.9%, SoC -1.0C |
 
+## 014-repro-cpu-uv37.5
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| (no results yet) |
+
+## 015-uv37.5-trip115
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| (no results yet) |
+
+## 016-uv37.5-trip115-cpu2100
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 134 | 384 | 100% | 107.9 | 1012 | 700 | 97.40 | 0.00 | CPU perf +46.4%, SoC +2.9C, vddcpu -38mV |
+| gpu | 129 | 850 | 0% | 64.1 | 719 | 799 | 0.00 | 16.24 | GPU perf -0.2%, SoC -1.8C, vddgpu +0mV |
+
+## 017-uv37.5-trip109-stock-freq
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| (no results yet) |
+
+## 018-uv37.5-stock-trips-freq2002
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| (no results yet) |
+
+## 019-uv37.5-oc2100-ov1075
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 80 | 384 | 100% | 106.0 | 1009 | 700 | 62.14 | 0.00 | CPU perf -6.6%, SoC +1.0C, vddcpu -41mV |
+| gpu | 128 | 850 | 0% | 68.5 | 761 | 800 | 0.00 | 16.23 | GPU perf -0.3%, SoC +2.6C, vddgpu +1mV |
+| both | 76 | 458 | 84% | 105.0 | 1009 | 714 | 60.45 | 8.23 | CPU ~0%, FPS +1.4%, SoC -0.8C |
+
 ## Conclusions (running)
 
 - **CPU UV lands on hardware.** vddcpu tracks the DT voltage reduction (minus AVS adjustment).
