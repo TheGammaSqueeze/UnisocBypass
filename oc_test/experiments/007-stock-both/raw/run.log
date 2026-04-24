@@ -1,0 +1,5 @@
+==> bench mode=both duration=180s
+==> pre-test OPP voltage sweep
+mode=both cpu0=2002000 cpu6=2002000 gpu=850000000
+==> starting CPU stress on 8 cores
+==> starting GPU stress

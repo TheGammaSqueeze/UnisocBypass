@@ -1,0 +1,17 @@
+==> torture test: duration 180s
+==> OPP voltage sweep (pre-test)
+==> applying setclock_max.sh semantics
+cpu0_freq=2002000
+cpu6_freq=2002000
+gpu_freq=850000000
+pre_stress_vddcpu=1025000
+pre_stress_vddgpu=700000
+==> starting CPU stress on 8 cores
+==> starting GPU stress
+==> running for 180s
+==> stopping stressors
+==> done
+telemetry: /data/local/tmp/oc_test/telemetry.csv
+opp sweep: /data/local/tmp/oc_test/opp_voltage_sweep.csv
+gpu log:   /data/local/tmp/oc_test/gpu_stress.log
+cpu cnts:  /data/local/tmp/oc_test/cpu_counts.txt

@@ -1,31 +1,50 @@
 # OC/UV experiment changelog
 
-Chronological log of DTB experiments on the RG Vita (UMS512 / T618). One row per test, most recent first.
+Chronological log of bench/torture tests on the RG Vita (UMS512 / T618). Most recent first.
 
-| # | Date | Config | Test | GPU avg MHz | GPU throttled % | SoC peak | FPS last 10 s | Outcome |
-|---|------|--------|------|------------:|----------------:|---------:|--------------:|---------|
-| 003 | 2026-04-24 | GPU UV -25 mV all | GPU-only, CPUs low | **850** | 0 % | 66 C | 16.45 | stable at 850 MHz for 180 s |
-| 002 | 2026-04-24 | GPU UV -25 mV all | CPU+GPU torture | 506 | 75 % | 106 C | 7.52 | no benefit (CPU-dominated thermals) |
-| 001 | 2026-04-24 | GPU UV top -12.5 mV | CPU+GPU torture | 499 | 75 % | 102 C | 7.52 | no measurable benefit |
-| 000 | 2026-04-23 | stock | CPU+GPU torture | 517 | 71 % | 102 C | 7.56 | baseline |
+Each experiment lives in `experiments/NNN-short-name/` with `README.md`, `modify.py`, `modified.dts`, `raw/`, `REPORT.md`, and `vendor_boot.img.signed.sha256`.
 
-## Bricked attempts (recovery needed)
+## Test modes
+
+Starting with experiment 005, all tests run via `bench_test.sh <mode>`:
+
+- `cpu` - 8 cores at 2002 MHz stress, GPU pinned at 384 MHz idle
+- `gpu` - GPU at 850 MHz stress, CPU policies pinned to min (LITTLE 614.4 / BIG 1228.8)
+- `both` - concurrent CPU + GPU stress, equivalent to the legacy torture test
+
+Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.csv`, so the actual regulator voltage at each OPP is evidence that DTB changes reached the hardware.
+
+## Comparison table
+
+| # | date | dtb config | mode | samples | CPU avg MHz | GPU avg MHz | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | notes |
+|---|------|-----------|------|-------:|------------:|------------:|-----------:|----------:|----------:|--------:|--------:|-------|
+| 007 | 2026-04-24 | stock | both | 76 | 2002 | 588 | 106.8 | 1009 | 700-800 | 12.9 | 4.90 | stock baseline, both stress |
+| 006 | 2026-04-24 | stock | gpu | 39 | 1228 | 850 | 68.5 | 762 | 800 | n/a | 13.86 | stock baseline, GPU-only |
+| 005 | 2026-04-24 | stock | cpu | 135 | 2002 | 384 | 106.0 | 1050 | 700 | 20.0 | n/a | stock baseline, CPU-only |
+| 004 | 2026-04-24 | GPU UV -37.5 + CPU UV -25 | both | 96 | 2002 | 525 | 102.9 | 1025 | 700-800 | - | 9.4 | CPU UV landed (1025 mV), GPU UV did NOT land (vddgpu unchanged) |
+| 003 | 2026-04-24 | GPU UV -25 | gpu | 149 | 1228 | 850 | 66.1 | - | - | n/a | 16.41 | UV booted but vddgpu hardware unaffected |
+| 002 | 2026-04-24 | GPU UV -25 | both (legacy) | 95 | 2002 | 506 | 106.3 | - | - | - | 8.86 | legacy torture, pre-voltage-sampling harness |
+| 001 | 2026-04-24 | GPU UV top -12.5 | both (legacy) | 112 | 2002 | 499 | 101.9 | - | - | - | 9.22 | legacy torture |
+| 000 | 2026-04-23 | stock | both (legacy) | 109 | 2002 | 517 | 102.1 | - | - | - | 9.56 | legacy torture baseline (supplanted by 007) |
+
+## Bricked attempts
 
 | attempt | config | failure mode |
 |---------|--------|--------------|
-| brick-01 | CPU OC 2002->2100 MHz + 1050->1075 mV on T618 variants + GPU UV -50 mV | no boot - cluster mapping tables not extended |
-| brick-02 | GPU UV -50 mV all OPPs (650/700/750 mV) | no boot - voltage too aggressive or UV regions mismatched with cluster tables |
-| brick-03 | in-place DTB replace (no editor repack) at various voltages | no boot - in-place replace missed an AVB / size field somewhere |
+| brick-01 | CPU OC 2002->2100 MHz + voltage 1050->1075 mV | no boot (cluster mapping tables not extended) |
+| brick-02 | GPU UV -50 mV all OPPs | no boot (voltage too aggressive or tables mismatched) |
+| brick-03 | in-place DTB replace (no `android_boot_image_editor` repack) | no boot (header field or AVB footer integrity) |
 
-## Lessons learned
+## Key findings so far
 
-1. **Always round-trip through `android_boot_image_editor`**, not in-place DTB replace. The editor handles AVB + header padding correctly.
-2. **GPU DTB has paired tables**: `operating-points` and `sprd,dvfs-lists`. Both must be updated consistently.
-3. **Torture test with all 8 cores at max is NOT sensitive to GPU UV.** The CPU-driven heat dominates the thermal picture. Use `gpu_only_test.sh` to isolate GPU thermal behavior when evaluating UV.
-4. **CPU OC requires extending per-cluster mapping tables** (`lit_core_cluster_tbl_T618_tt`, `big_core_cluster_tbl_T618_tt`, `scu_cluster_tbl_T618_tt`, etc.). Just adding a row to `operating-points-T618-tt` is not sufficient.
-5. **Safe UV range** so far: -25 mV across all GPU OPPs verified stable. -50 mV bricks. Cliff is somewhere between.
+1. **CPU voltage responds to DTB changes.** UV applied in the `operating-points-T618-tt` table reaches the SC2730 DCDC_CPU regulator via the standard Linux regulator framework. Verified in exp 004: vddcpu @ 2002 MHz dropped from stock 1009-1050 mV to 1025 mV when DT was changed from 1050 to 1025.
+2. **GPU voltage does NOT respond to DTB changes.** The Mali-G52 driver uses Unisoc's hardware DVFS register path driven by `sprd,dvfs-lists` hw_index slots, not the Linux regulator framework. Modifying `operating-points` and `sprd,dvfs-lists` voltages in the DT has no observable effect at the regulator level.
+3. **Stock vddcpu runtime < stock DT voltage** in some cases (observed 1009 mV at 2002 MHz during exp 007, vs DT 1050 mV). Suggests adaptive voltage scaling (AVS) in the HW DVFS path actively trims CPU voltage below the DT ceiling.
+4. **Safe UV range**: CPU UV -25 mV verified stable. GPU UV in DT does not apply at all so there is no "safe" range yet; that requires modifying the HW DVFS path (not the DT).
+5. **Thermal envelope during `both` torture is dominated by CPU power.** GPU-only tests stay under 70 C. CPU-only tests hit 106 C. Combined tests still hit 106 C with heavy GPU throttling.
 
 ## Planned next
 
-- Experiment 004: GPU UV -37.5 mV all OPPs (midpoint between known-safe -25 and known-cliff -50).
-- Experiment 005+: CPU OC via full cluster-table extension, once hwdvfs table layout is fully reverse-engineered.
+- Re-run CPU UV (-25 and -37.5 mV) using bench_test.sh in all three modes, to quantify how much CPU UV actually helps CPU-only and both-mode thermals.
+- Investigate GPU voltage table: find the actual node in DT (or in a kernel driver) that controls the HW DVFS voltage indices. Candidates: `mpll-prometheus`, `mpll-ananke`, or a separate voltage-grade mapping. Without touching this path, GPU UV via DTB is a no-op.
+- Once CPU UV value space is mapped out, attempt CPU OC again with proper cluster table extension.

@@ -1,0 +1,8 @@
+ts_ms duration=180
+vddcpu=/sys/class/regulator/regulator.1/microvolts vddgpu=/sys/class/regulator/regulator.2/microvolts vddcore=/sys/class/regulator/regulator.3/microvolts
+cpu0_freq=2002000
+cpu6_freq=2002000
+gpu_freq=850000000
+pre_stress_vddcpu=1025000
+pre_stress_vddgpu=700000
+gpu_pid=16737
