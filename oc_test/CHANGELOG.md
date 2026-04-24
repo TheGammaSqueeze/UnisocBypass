@@ -18,6 +18,12 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 
 | # | date | dtb config | mode | samples | CPU avg MHz | GPU avg MHz | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | notes |
 |---|------|-----------|------|-------:|------------:|------------:|-----------:|----------:|----------:|--------:|--------:|-------|
+| 021-cpu | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | cpu | 98 | 2002 | 384 | 102.4 | 1050 | 700 | 73.2 | 0.00 | iteration step (CPU unchanged) |
+| 021-gpu | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | gpu | 129 | 1228 | 900 | 64.7 | 756 | 800 | 0.0 | 16.23 | Mali logs volt=850000, rail clamped at 800 mV |
+| 021-both | 2026-04-24 | GPU OC 900 MHz + operating-points volt 850 mV | both | 66 | 2002 | 452 | 105.5 | 1050 | 712 | 56.1 | 8.07 | DT OV rejected at HW DVFS layer |
+| 020-cpu | 2026-04-24 | GPU OC 900 MHz stock volt | cpu | 71 | 2002 | 384 | 106.3 | 1050 | 700 | 57.2 | 0.00 | iteration step |
+| 020-gpu | 2026-04-24 | GPU OC 900 MHz stock volt | gpu | 101 | 1228 | 900 | 63.6 | 756 | 800 | 0.0 | 14.93 | 900 MHz freq applies from DT |
+| 020-both | 2026-04-24 | GPU OC 900 MHz stock volt | both | 68 | 2002 | 458 | 105.5 | 1050 | 712 | 56.7 | 8.09 | iteration step |
 | 008-cpu | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | cpu | 114 | 2002 | 384 | 98.8 | 1012 | 700 | 81.2 | 0.00 | iteration step |
 | 008-gpu | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | gpu | 129 | 1228 | 850 | 61.0 | 719 | 799 | 0.0 | 16.26 | iteration step |
 | 008-both | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | both | 86 | 2002 | 482 | 105.5 | 1012 | 720 | 65.8 | 8.56 | iteration step |
@@ -41,13 +47,15 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 ## Key findings so far
 
 1. **CPU voltage responds to DTB changes.** UV applied in the `operating-points-T618-tt` table reaches the SC2730 DCDC_CPU regulator via the standard Linux regulator framework. Verified in exp 004: vddcpu @ 2002 MHz dropped from stock 1009-1050 mV to 1025 mV when DT was changed from 1050 to 1025.
-2. **GPU voltage does NOT respond to DTB changes.** The Mali-G52 driver uses Unisoc's hardware DVFS register path driven by `sprd,dvfs-lists` hw_index slots, not the Linux regulator framework. Modifying `operating-points` and `sprd,dvfs-lists` voltages in the DT has no observable effect at the regulator level.
-3. **Stock vddcpu runtime < stock DT voltage** in some cases (observed 1009 mV at 2002 MHz during exp 007, vs DT 1050 mV). Suggests adaptive voltage scaling (AVS) in the HW DVFS path actively trims CPU voltage below the DT ceiling.
-4. **Safe UV range**: CPU UV -25 mV verified stable. GPU UV in DT does not apply at all so there is no "safe" range yet; that requires modifying the HW DVFS path (not the DT).
-5. **Thermal envelope during `both` torture is dominated by CPU power.** GPU-only tests stay under 70 C. CPU-only tests hit 106 C. Combined tests still hit 106 C with heavy GPU throttling.
+2. **GPU voltage does NOT respond to DTB changes, and exp 021 pinpoints why.** The Mali driver reads `operating-points` voltage and calls `regulator_set_voltage(850000)` when the DT asks for 850 mV (confirmed via Mali dmesg: `volt=850000` in `kbase_platform_set_freq_volt`). But the HW DVFS mechanism writing to `dvfs_index_cfg` + `core_indexN_map` autonomously sets vddgpu per its own voltage grade table, overriding the software regulator request. Rail stays at 800 mV for the top OPP regardless of DT.
+3. **GPU freq DOES respond to DT.** Exp 020 raised the top OPP from 850 to 900 MHz via operating-points/sprd,dvfs-lists and the GPU ran at 900 MHz under load. So freq-only OC works; voltage changes require kernel patching.
+4. **Kernel patch target**: either `core_indexN_map` register values in DT (which drive PMIC writes), or the voltage grade table in `sprd-hwdvfs-policy.ko` / `sprd-hwdvfs-ums512-arch.ko` (strings: `TOP_DVFS_VOL_GRADE_TBL`, `ums512_volt_grades_tbl`, `sprd_voltage_grade_value_update`).
+5. **Stock vddcpu runtime ~= stock DT voltage** - no AVS floor; rail follows DT. Earlier "1009 mV" readings were just averaging across 1009/1050 mV transitions between freq changes.
+6. **Safe UV range**: CPU UV -37.5 mV verified stable in exp 008/014. GPU UV via DT is a no-op.
+7. **Thermal envelope during `both` torture is dominated by CPU power.** GPU-only tests stay under 70 C. CPU-only tests hit 106 C. Combined tests still hit 106 C with heavy GPU throttling.
 
 ## Planned next
 
-- Re-run CPU UV (-25 and -37.5 mV) using bench_test.sh in all three modes, to quantify how much CPU UV actually helps CPU-only and both-mode thermals.
-- Investigate GPU voltage table: find the actual node in DT (or in a kernel driver) that controls the HW DVFS voltage indices. Candidates: `mpll-prometheus`, `mpll-ananke`, or a separate voltage-grade mapping. Without touching this path, GPU UV via DTB is a no-op.
-- Once CPU UV value space is mapped out, attempt CPU OC again with proper cluster table extension.
+- **Patch GPU voltage path in kernel**: locate hw_index-to-voltage binding in `sprd-hwdvfs-policy.ko` (strings point to `TOP_DVFS_VOL_GRADE_TBL`, `ums512_volt_grades_tbl`, `sprd_voltage_grade_value_update`, `default_dcdc_volt_update`). Target: raise voltage grade 4 (top OPP) from 800 to 850 mV, enabling stable 950+ MHz OC.
+- **Patch CPU voltage path**: the CPU uses a separate `sprd-hwdvfs-ums512-arch.ko` with cluster tables (`lit_core_cluster_tbl_T618_tt`, `big_core_cluster_tbl_T618_tt`). Adding a 2100+ MHz entry requires extending these tables, not just operating-points.
+- Re-check vendor_boot/SPL for voltage grade registers programmed at boot (unlikely per earlier SPL RE, but worth confirming).
