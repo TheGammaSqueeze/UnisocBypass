@@ -1,44 +1,70 @@
-# OC/UV torture test comparison
+# Experiment comparison vs stock baselines
 
-All tests: 180 s duration, Mali-G52 at 850 MHz performance governor, devfreq thermal cooling active.
+Auto-generated from `oc_test/experiments/*/{cpu,gpu,both}/telemetry.csv` and friends. Stock baselines: 005 (cpu-only), 006 (gpu-only), 007 (both).
 
-## Frequency stability and thermals
+## Stock baseline reference
 
-| test | samples | GPU avg MHz | GPU <850 | SoC peak | GPU TZ peak | BIG TZ peak |
-|------|--------:|------------:|---------:|---------:|------------:|------------:|
-| stock (max CPU+GPU) | 109 | 517 | 78/109 (71%) | 102.1 C | 94.3 C | 100.6 C |
-| UV-12.5mV top OPP | 112 | 499 | 85/112 (75%) | 101.9 C | 95.1 C | 101.1 C |
-| UV-25mV all OPPs | 95 | 506 | 72/95 (75%) | 106.3 C | 99.2 C | 105.2 C |
-| UV-25mV GPU-only, low CPU | 149 | 850 | 0/149 (0%) | 66.1 C | 64.2 C | 66.1 C |
+| mode | samples | GPU avg MHz | GPU throttled % | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | FPS last 10s |
+|------|--------:|------------:|----------------:|-----------:|----------:|----------:|--------:|--------:|-------------:|
+| cpu | 85 | 384 | 100% | 105.0 | 1050 | 700 | 66.53 | 0.00 | 0.00 |
+| gpu | 129 | 850 | 0% | 66.0 | 761 | 799 | 0.00 | 16.27 | 16.23 |
+| both | 75 | 446 | 86% | 105.8 | 1050 | 713 | 60.39 | 8.12 | 7.48 |
 
-## GPU FPS (shader-bound stressor at 1280x720)
+## 000-stock-baseline
 
-| test | first 10 s | last 10 s | average |
-|------|-----------:|----------:|--------:|
-| stock (max CPU+GPU) | 16.69 | 7.56 | 9.56 |
-| UV-12.5mV top OPP | 16.38 | 7.52 | 9.22 |
-| UV-25mV all OPPs | 16.45 | 7.52 | 8.86 |
-| UV-25mV GPU-only, low CPU | 16.43 | 16.45 | 16.41 |
+Config: stock, no DTB modifications
 
-## Key findings
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| both | 109 | 517 | 71% | 102.1 | 0 | 0 | 75.12 | 9.56 | CPU +24.4%, FPS +17.7%, SoC -3.6C |
 
-1. **CPU stress dominates the thermal envelope in the original torture test.** With all 8 cores at 2 GHz, SoC hits 100+ C within 30 s and GPU devfreq thermal cooling throttles from 850 MHz to 384 MHz. GPU UV has negligible impact on this overall picture because the CPU is the main heat source.
+## 001-gpu-uv-top-12.5mV
 
-2. **GPU at 850 MHz with -25 mV UV is stable under GPU-only load.** With CPUs locked to minimum freq, GPU held 850 MHz for the entire 180 s with peak SoC temp of only 66 C. No frame drops, no instability.
+Config: top GPU OPP voltage reduced by 12.5 mV (one SC2730 DCDC step)
 
-3. **GPU UV past -50 mV fails to boot** (first brick attempt). The safe range appears to be at least -25 mV across all OPPs. Deeper UV sweeps were not completed due to brick risk.
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| both | 112 | 499 | 75% | 101.9 | 0 | 0 | 76.37 | 9.22 | CPU +26.5%, FPS +13.5%, SoC -3.9C |
 
-4. **CPU OC via DTB OPP table extension failed** (second brick). The cluster mapping tables `lit_core_cluster_tbl_T618_tt` / `big_core_cluster_tbl_T618_tt` and the voltage-grade tables need to be extended in parallel when adding new OPPs; just changing the top OPP values without updating the dependency indices does not work.
+## 002-gpu-uv-all-25mV
 
-## Practical implication
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| both | 95 | 506 | 75% | 106.3 | 0 | 0 | 62.42 | 8.86 | CPU +3.4%, FPS +9.1%, SoC +0.5C |
 
-In a realistic gaming workload (2-4 CPU cores active, not 8), the GPU thermal budget is much more generous. The `-25 mV` UV is proven safe and reduces GPU power by ~6%, which should let the GPU sustain higher frequencies longer under mixed load. Further UV testing would iterate toward the stability cliff.
+## 003-gpu-uv-all-25mV-gpu-only-load
 
-For CPU OC, the right approach requires DTB-level changes to:
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| gpu | 149 | 850 | 0% | 66.1 | 0 | 0 | 0.00 | 16.41 | GPU perf +0.8%, SoC +0.2C, vddgpu -799mV |
 
-- `operating-points-T618-tt` and `-tt-65` variants (LITTLE and BIG)
-- Per-cluster mapping tables `lit_core_cluster_tbl_T618_tt[_65]`, `big_core_cluster_tbl_T618_tt[_65]`
-- SCU / periph / gic cluster tables `scu_cluster_tbl_T618_tt[_65]` etc.
-- Possibly a voltage grade table in the hwdvfs module
+## 004-gpu-uv37.5-cpu-uv25
 
-Each new OPP adds one row to each of those tables. Getting this right requires careful reading of the sprd-hwdvfs-ums512-arch.ko parsing code to understand the exact table layout.
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| both | 96 | 525 | 69% | 102.9 | 1025 | 728 | 72.62 | 9.16 | CPU +20.2%, FPS +12.8%, SoC -2.9C |
+
+## 008-cpu-uv37.5-gpu-uv25
+
+Config: CPU LITTLE/BIG UV -37.5 mV across all OPPs, GPU UV -25 mV across all OPPs
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 114 | 384 | 100% | 98.8 | 1012 | 700 | 81.20 | 0.00 | CPU perf +22.1%, SoC -6.2C, vddcpu -38mV |
+| gpu | 129 | 850 | 0% | 61.0 | 719 | 799 | 0.00 | 16.26 | GPU perf ~0%, SoC -4.9C, vddgpu +0mV |
+| both | 86 | 482 | 79% | 105.5 | 1012 | 720 | 65.83 | 8.56 | CPU +9.0%, FPS +5.4%, SoC -0.3C |
+
+## 009-cpu-uv50-gpu-uv37.5
+
+| mode | samples | GPU avg | GPU thr. % | SoC pk C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | vs stock |
+|------|--------:|--------:|-----------:|---------:|----------:|----------:|--------:|--------:|----------|
+| cpu | 106 | 384 | 100% | 101.1 | 1009 | 700 | 77.51 | 0.00 | CPU perf +16.5%, SoC -3.9C, vddcpu -41mV |
+| gpu | 129 | 850 | 0% | 62.8 | 706 | 799 | 0.00 | 16.21 | GPU perf -0.4%, SoC -3.1C, vddgpu +0mV |
+| both | 81 | 467 | 82% | 105.3 | 1000 | 717 | 63.87 | 8.45 | CPU +5.7%, FPS +4.0%, SoC -0.5C |
+
+## Conclusions (running)
+
+- **CPU UV lands on hardware.** vddcpu tracks the DT voltage reduction (minus AVS adjustment).
+- **GPU UV via DTB does NOT land.** vddgpu stays at stock 700/800 mV regardless of DT voltage changes. Requires a different attack path (kernel module patch or as-yet-unidentified DT property).
+- **Torture mode is CPU-thermal-dominated.** CPU-only hits 106 C just as fast as both-mode. GPU-only stays below 70 C. UV impact on both-mode thermals is modest (~1-2 C) unless the UV is deep enough to noticeably cut CPU power.
+- **UV performance cliff**: TBD. Iterating down in 12.5 mV steps until either perf drops >10% or boot fails.

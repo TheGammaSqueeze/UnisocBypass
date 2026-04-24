@@ -1,0 +1,4 @@
+==> bench mode=gpu duration=180s
+vddcpu=/sys/class/regulator/regulator.1/microvolts vddgpu=/sys/class/regulator/regulator.2/microvolts vddcore=/sys/class/regulator/regulator.3/microvolts
+mode=gpu cpu0=614400 cpu6=1228800 gpu=850000000
+gpu_pid=18497

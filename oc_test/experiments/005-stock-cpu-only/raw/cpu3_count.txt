@@ -1,1 +1,1 @@
-cpu3_kbytes=3444736
+cpu3_kbytes=9490432
