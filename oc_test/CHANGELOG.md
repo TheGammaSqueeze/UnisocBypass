@@ -18,6 +18,9 @@ Every run includes a pre-test OPP voltage sweep recorded to `opp_voltage_sweep.c
 
 | # | date | dtb config | mode | samples | CPU avg MHz | GPU avg MHz | SoC peak C | vddcpu mV | vddgpu mV | CPU GiB | FPS avg | notes |
 |---|------|-----------|------|-------:|------------:|------------:|-----------:|----------:|----------:|--------:|--------:|-------|
+| 008-cpu | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | cpu | 114 | 2002 | 384 | 98.8 | 1012 | 700 | 81.2 | 0.00 | iteration step |
+| 008-gpu | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | gpu | 129 | 1228 | 850 | 61.0 | 719 | 799 | 0.0 | 16.26 | iteration step |
+| 008-both | 2026-04-24 | CPU -37.5 mV + GPU -25 mV | both | 86 | 2002 | 482 | 105.5 | 1012 | 720 | 65.8 | 8.56 | iteration step |
 | 007 | 2026-04-24 | stock | both | 76 | 2002 | 588 | 106.8 | 1009 | 700-800 | 12.9 | 4.90 | stock baseline, both stress |
 | 006 | 2026-04-24 | stock | gpu | 39 | 1228 | 850 | 68.5 | 762 | 800 | n/a | 13.86 | stock baseline, GPU-only |
 | 005 | 2026-04-24 | stock | cpu | 135 | 2002 | 384 | 106.0 | 1050 | 700 | 20.0 | n/a | stock baseline, CPU-only |
