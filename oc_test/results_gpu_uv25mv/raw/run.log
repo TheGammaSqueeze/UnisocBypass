@@ -1,0 +1,14 @@
+==> torture test: duration 180s, logs in /data/local/tmp/oc_test
+==> applying setclock_max.sh semantics
+==> pre-test state
+cpu0_freq=2002000
+cpu6_freq=2002000
+gpu_freq=850000000
+==> starting CPU stress on 8 cores
+==> starting GPU stress
+==> running for 180s ...
+==> stopping stressors
+==> done
+telemetry: /data/local/tmp/oc_test/telemetry.csv
+gpu log:   /data/local/tmp/oc_test/gpu_stress.log
+cpu cnts:  /data/local/tmp/oc_test/cpu_counts.txt

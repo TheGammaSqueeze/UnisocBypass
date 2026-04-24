@@ -1,0 +1,5 @@
+ts_ms duration=180
+cpu0_freq=2002000
+cpu6_freq=2002000
+gpu_freq=850000000
+gpu_pid=3293
