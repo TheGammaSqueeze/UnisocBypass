@@ -1,0 +1,3 @@
+==> bench mode=cpu duration=180s
+vddcpu=/sys/class/regulator/regulator.1/microvolts vddgpu=/sys/class/regulator/regulator.2/microvolts vddcore=/sys/class/regulator/regulator.3/microvolts
+mode=cpu cpu0=2002000 cpu6=2002000 gpu=384000000
