@@ -26,9 +26,10 @@ the dead ends.
 
 ## Headline numbers (corrected)
 
-600-second torture, identical methodology, GPU pinned, CPU pinned to min,
-30-second cool-down before each run, headless GLES 3.1 fragment-shader
-load at 1280x720:
+All numbers are from 600-second torture runs, identical methodology,
+30-second cool-down before each run.
+
+### GPU (gpu_stress headless GLES 3.1 fragment shader, 1280x720, CPU at min)
 
 | Config | Mean FPS | Median | Stddev | p1 | p99 | GPU MHz | SoC peak |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -42,6 +43,49 @@ load at 1280x720:
   exp 025 has 0 % such dips. So the OC's real value is **stability**,
   not raw throughput.
 
+### CPU (8 sha256sum workers via taskset, GPU at min)
+
+| Config | Throughput | Total work / 598s | LITTLE 1820 MHz residency | BIG 1228 MHz residency | Board peak |
+|---|---:|---:|---:|---:|---:|
+| Stock 2002 MHz pinned | 158.3 MiB/s | 92.42 GiB | 69.6 % | 83.2 % | 91.5 C |
+| OC 2100 MHz pinned (run 1) | 150.8 MiB/s | 88.06 GiB | 48.1 % | 85.2 % | **95.2 C** |
+| OC 2100 MHz pinned (run 2) | 158.8 MiB/s | 92.76 GiB | 70.2 % | 79.8 % | 91.5 C |
+
+- Pure freq scaling 2002 -> 2100 would predict +4.90 %.
+- Observed (run 1): -4.74 %.
+- Observed (run 2, same config): **+0.32 %** vs stock. Within noise.
+- Run 1 was run back-to-back after the stock test with insufficient
+  cool-down. The chip started already warm, hit the throttle threshold
+  earlier, and spent more time at lower frequencies (LITTLE 48 % at 1820
+  vs stock 70 %; 10 % at 1228 vs stock 0.2 %). With a longer cool-down,
+  run 2 reproduces stock residency (LITTLE 70 % at 1820, BIG 80 % at
+  1228) and converges to identical sustained throughput. The "-4.72 %"
+  from run 1 was a thermal-state artefact, not a property of the OC.
+- **Honest conclusion: under sustained all-core load, the CPU OC delivers
+  zero additional throughput.** Both stock and OC saturate the same
+  thermal budget and end up dispatched to the same effective frequencies.
+  The 2100 MHz top OPP is reached in <0.5 % of samples either way.
+- The OC is not a *regression* either, just a no-op at sustained load.
+  It may still help short bursty workloads that finish before the chip
+  saturates (sub-30s tasks). For sustained 8-core work, headroom in the
+  OPP table doesn't translate to real throughput on this thermal package.
+
+### Combined picture
+
+- The CPU OC component of exp 025 is a **wash** under sustained 8-core
+  load - same throughput as stock, same thermal envelope.
+- The GPU OC component delivers a marginal +1.57 % with better stability
+  but no real-world throughput gain.
+- Earlier 180-second `bench_test.sh` runs that suggested +17 % GPU and
+  +18.6 % CPU are short-bench artefacts. Once thermal saturation kicks
+  in (~30-60 s after a cool-down), all of the gain disappears.
+
+For practical use the recommended config is **stock everywhere, or stock
+CPU + GPU OC 900 MHz** if you specifically want the GPU stability win.
+The CPU UV (-37.5 mV) at the lower OPPs is still uncontroversial (lower
+voltage at the same frequency is a free win), but its claimed
+contribution to all-core sustained throughput was over-estimated.
+
 ## What "exp 025" was
 
 A bundled DTB containing every individually-verified-stable knob:
@@ -54,10 +98,10 @@ A bundled DTB containing every individually-verified-stable knob:
   by the hardware DVFS path - see voltage-ceiling-hunt/)
 
 This config was the "daily driver" recommendation. With +1.57 % real
-gain and only marginal stability improvement, **rolling back to stock
-GPU is a defensible choice**. The CPU UV (-37.5 mV) and CPU OC (2100)
-are still uncontroversial individual wins; the GPU OC is the
-debatable one.
+GPU gain and 0 % real CPU gain under sustained load, **rolling back to
+stock everywhere is a defensible choice**. The CPU UV (-37.5 mV) is the
+only uncontroversial individual win (lower voltage at unchanged
+frequency); the CPU OC and GPU OC are both debatable.
 
 ## Voltage ceiling
 
