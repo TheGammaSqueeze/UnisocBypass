@@ -1,0 +1,125 @@
+sc2730_dcdc_get_voltage
+sc2730_regulator_probe
+pmic_adc_set_channel
+pmic_adc_get_values
+get_adc_value_board
+sc2730_power_control_bind
+sc2730_bind
+Adc value of rf band if is wrong, the rfboard.id will be set to -1
+@@@@@@@@@@@@@@@@@@@@pmic_lowpower_config  !!!!!!!! 
+regulator-name
+pmic2731_wa
+/adc.bin
+read miscdata adc data error.
+androidboot.pmic.chipid
+pmic node not exist!!!
+add iram-dsize prop to pmic node failed
+add iram-data prop to pmic node failed
+pmic reg prop not exist,sp_iram_addr = 0x%lx !!
+auto.adc,
+auto/adc_raw=%ld
+err:%s(): adc limits to 0~%d
+warning:%s(): warn: read adc value timeout....
+/home/dell/code/work/sprd/T618/RG555/RG555_Android_user/bsp/bootloader/u-boot15/drivers/misc/pmic_efuse.c
+pmic27xx_poweroff
+pmic read fail, %d
+pmic write fail, %d
+pmic_eic_sprd
+sprd,sc2731-eic
+Card did not respond to voltage select!
+		regu_dcdc %p (%s) %d = %d %+dmv (trim=%d step=%duv);
+DCDC_CPU_DTM
+DCDC_GPU_DTM
+DCDC_CORE_DTM
+DCDC_MODEM_DTM
+DCDC_MEM_DTM
+DCDC_MEMQ_DTM
+DCDC_GEN0_DTM
+DCDC_GEN1_DTM
+DCDC_SRAM_DTM
+DCDC_WPA_DTM
+DCDC_CPU_CF
+DCDC_GPU_CF
+DCDC_MODEM_CF
+DCDC_WPA_CF
+DCDC_CPU_STBOP
+DCDC_GPU_STBOP
+DCDC_CORE_STBOP
+DCDC_MODEM_STBOP
+DCDC_SRAM_STBOP
+DCDC_CPU_ZCD
+DCDC_GPU_ZCD
+DCDC_CORE_ZCD
+DCDC_MODEM_ZCD
+DCDC_MEM_ZCD
+DCDC_MEMQ_ZCD
+DCDC_GEN0_ZCD
+DCDC_GEN1_ZCD
+DCDC_WPA_ZCD
+DCDC_SRAM_ZCD
+ERR: read vbat adc fail!!!
+vbat adc%d:%d
+vbat avg adc:%d
+error!!! fgu voltage not ready!
+sprd,sc2731-fgu
+sprd,sc2730-fgu
+sprd,sc2721-fgu
+sprd,sc2720-fgu
+***Warning: write pmic register:0x%08x failed.
+***Warning: write pmic register failed.
+sc2730 probe reg init failed.
+sc2730 probe reload config failed.
+***Warning: read pmic register by adi failed.
+sc2730 probe reset cbank failed.
+***Warning: read pmic register failed.
+sc2730_pmic
+sprd,sc2730
+sc2730-power-controler
+pmic_adc
+pmic_efuse
+sc27xx-vibrator
+DCDC
+sc2730-regulator
+regulator-min-microvolt
+regulator-max-microvolt
+regulator-min-microamp
+regulator-max-microamp
+regulator-always-on
+regulator-boot-on
+regulator-ramp-delay
+Regulator %s probe successfully.
+The regulator %s is not found in description.
+/home/dell/code/work/sprd/T618/RG555/RG555_Android_user/bsp/bootloader/u-boot15/drivers/power/regulator/sc2730-regulator.c
+%s get voltage failed.
+%s set voltage failed.
+nvidia,tegra124-xusb-padctl
+nvidia,tegra210-xusb-padctl
+PMIC_AFC_CALI
+pmic@0
+2sprd,sc2730
+2sprd,sc27xx-bltc
+sprd,sc2730-bltc
+2sprd,sc27xx-rtc
+2sprd,sc2730-eic
+sprd,sc2731-eic
+pmic_eic
+2sprd,sc2730-efuse
+adc@504
+2sprd,sc2730-adc
+DCDC_CPU
+DCDC_GPU
+DCDC_CORE
+DCDC_MODEM
+DCDC_MEM
+DCDC_MEMQ
+DCDC_GEN0
+DCDC_GEN1
+DCDC_SRAM
+2sprd,sc27xx-vibrator
+sprd,sc2730-vibrator
+2sprd,sc2730-fgu
+regulator-name
+regulator-min-microvolt
+regulator-max-microvolt
+regulator-ramp-delay
+regulator-always-on
