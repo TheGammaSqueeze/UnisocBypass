@@ -22,7 +22,20 @@ the dead ends.
 | [`torture_2026-04-25/`](torture_2026-04-25/) | 600-second, single-pin torture comparing exp 025 (900 MHz) vs stock (850 MHz). The CSVs underpin the +1.5 % number above. |
 | [`voltage-ceiling-hunt/`](voltage-ceiling-hunt/) | The full chain of analysis - SPL/uboot scans, ftrace + kprobe of the regulator path, decoded GPU voltage-grade table at top DVFS controller offsets `0xe4`/`0xe8`, and the kernel-module-loading attempt that made it past sig_enforce but couldn't break Mali's clock-on rewrite. |
 | [`kernel_rev/`](kernel_rev/) | Vendor kernel modules pulled from `/vendor_dlkm` for offline RE. |
+| [`widevine_crash_analysis.md`](widevine_crash_analysis.md) | Why dtbo modifications to `widevine@e3800000` brick the device even when OEM-signed: ION carveout vs CMA conflict, DPU TA secure-layer fastcalls, and what is/isn't reachable from the public sources. |
 | [`OC_FEASIBILITY.md`](OC_FEASIBILITY.md) | First-pass survey of where DVFS lives in the boot chain. |
+
+### Matching kernel source
+
+For any out-of-tree module work or kernel-side patching of sprd_ion /
+sprd_drm / disp_trusty / dpu_r6p0, the matching Linux 5.4.x UMS512 source
+is at
+[`github.com/TheGammaSqueeze/kernel_ums512_5.4`](https://github.com/TheGammaSqueeze/kernel_ums512_5.4)
+(fork of `marohinmark/kernel_ums512_5.4` with our build adjustments
+applied: `SUBLEVEL=161`, `setlocalversion` empty-string override,
+LLD-18-friendly Makefile tweaks). vermagic, CFI, and LTO config required
+to match the running kernel are documented in
+[`voltage-ceiling-hunt/MODULE_LOADING_PATH.md`](voltage-ceiling-hunt/MODULE_LOADING_PATH.md).
 
 ## Headline numbers (corrected)
 

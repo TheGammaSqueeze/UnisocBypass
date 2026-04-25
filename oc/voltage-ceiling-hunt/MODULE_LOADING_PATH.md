@@ -24,8 +24,11 @@ and what stopped us.
 
 ## Out-of-tree module build chain
 
-- Cloned `marohinmark/kernel_ums512_5.4` (closest public 5.4 UMS512 source)
-  to `/work/ums512_kernel`.
+- Cloned `TheGammaSqueeze/kernel_ums512_5.4`
+  ([github.com/TheGammaSqueeze/kernel_ums512_5.4](https://github.com/TheGammaSqueeze/kernel_ums512_5.4),
+  fork of `marohinmark/kernel_ums512_5.4` - the closest public 5.4 UMS512
+  source - with the small build adjustments below applied) to
+  `/work/ums512_kernel`.
 - Edited `Makefile`: `SUBLEVEL=161` (matches device).
 - `setlocalversion` overridden to print empty string (otherwise `+` suffix).
 - Started with the device's actual `/proc/config.gz` as `.config`. This
