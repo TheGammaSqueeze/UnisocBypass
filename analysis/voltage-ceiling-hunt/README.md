@@ -128,68 +128,84 @@ registers seen via the SPI window mapped through the AP-side SPI
 controller. Each table row describes a single MMIO write to the SC2730
 chip with mask + value.
 
-### UV literals near the table
+### UV literals - corrected with alignment check
 
-| Value | Count | Locations |
-|-------|------:|-----------|
+Initial scan reported 12 occurrences of 800000 (0xc3500) clustered at
+0xb847f-0xb87c7. **Re-running the same search with 4-byte alignment
+constraint shows zero matches** for 800000, 850000, 700000, 750000
+or 900000 across the entire uboot binary. The 12 "hits" were all
+**misaligned** matches of the byte sequence `\x00\x35\x0c\x00`, which
+is the natural placement of the constant `0x00000c35` (= 3125 = the
+SC2730 DCDC step in uV) at u32 boundaries followed by a zero u32 at
+the next boundary.
+
+| Value | Aligned count | Notes |
+|-------|--------------:|-------|
 | 700000 | 0 | - |
-| 750000 | 1 | 0x878b5 |
-| 800000 | 12 | 0xb847f, 0xb84ef, 0xb863f, 0xb8677, 0xb87c7, ... |
+| 750000 | 0 | - |
+| 800000 | 0 | - |
 | 850000 | 0 | - |
-| 1000000 | 1 | 0x87ae0 |
+| 900000 | 0 | - |
+| 1000000 | 1 | 0x87ae0 (single literal, isolated) |
+| 1050000 | 0 | - |
 
-The 800000 cluster (12 hits) lies INSIDE the DCDC config table region
-0xb83ef-0xb88xx. **800000 = 0xc3500 in microvolts.** The presence of
-this value at 12 distinct positions in the DCDC config table is the
-strongest single piece of evidence that **uboot writes 800 mV as the
-target voltage for multiple DCDC rails at boot**, and that the
-specific value 800 mV is hardcoded into uboot for the GPU rail.
+So uboot does NOT hardcode 800 mV. The voltage targets for the various
+DCDCs come from the device tree blob that uboot parses, not from
+constants compiled into the binary.
 
-850000 uV does NOT appear in uboot anywhere. So whatever range uboot
-programs into the PMIC DCDC limit registers (or initial setpoint), the
-maximum referenced for the GPU rail is exactly 800 mV.
+### Re-analysed register-write table
 
-## Hypothesis
+The table at file offset 0xb83a0 is a 48-byte-stride array of register
+init descriptors used by uboot during PMIC bring-up. A function at
+text offset 0x46290 indexes into this array and OR-sets bit 0x40 in
+some target register. The table contains many SC2730 SPI window
+addresses (0x32_12_18_xx for DCDC region, 0x32_12_19_xx for LDOs/clk),
+masks (`0x1ff` matching the 9-bit DCDC vsel field), step values
+(`0xc35` = 3125 uV) and timing values, but NOT explicit voltage targets.
 
-UBoot's `sc2730_regulator_probe()` (function name confirmed at file
-offset 0x84170) walks a static DCDC descriptor table starting near
-0xb83ef. For each DCDC, it programs:
+The presence of `0x32121894` (DCDC vsel?) plus the mask `0x1ff` plus
+value `0x258` (= 600 selector) at one entry would correspond to
+output_uV = 200000 + 600 * 3125 = **2075000 uV (2075 mV)**, which is
+clearly wrong for any of the rails we care about. Values like `0x258`
+and `0x320` may instead be timing or current-trim values, with the
+voltage being read from DT and computed at runtime.
 
-1. **Initial setpoint** (vsel) - via the `sel` field (e.g. 0x258 in
-   the example entry). With base 200000 + step 3125 * sel = output uV.
-2. **Limit registers** - the `_CF` / `_DTM` / `_STBOP` registers per
-   DCDC. The "DTM" suffix is a strong hint at "DT Mask" or "Default
-   Target Mask" - i.e., the register that constrains how high the
-   subsequent kernel can drive vsel. SC2730 silicon does have a
-   per-DCDC voltage limit control.
-3. **Standby / zero-current detection** - the `_STBOP` and `_ZCD`
-   registers, which we don't care about for OC.
+## Revised conclusion
 
-The combination of (initial vsel = 800 mV for vddgpu, and `_CF` /
-`_DTM` register pre-programmed) is what locks the rail at 800 mV from
-the kernel's perspective, even after `regulator_set_voltage(850000)`
-issues a vsel write - the silicon-side limit register short-circuits.
+Both the **uboot binary code** and the **uboot embedded device tree**
+have been ruled out as the source of a hardcoded 800 mV ceiling on
+the GPU rail. There is no compile-time 800 mV literal anywhere in the
+uboot binary. Voltage targets are read from DT at runtime.
 
-## What this means for OC
+Re-examining the experimental evidence in `oc_test/CHANGELOG.md`:
 
-- The 800 mV GPU ceiling and 1050 mV CPU ceiling are programmed by
-  **stock uboot** at boot, before the kernel ever runs.
-- We already have the toolchain to modify uboot in this repo
-  (`tools/modify_uboot.py`, `tools/rehash.py`). After modifying, the
-  DHTB hash recomputes automatically.
-- Specifically, if we patch uboot to:
-  - Change the GPU vsel sel field from 0x258 (=600, i.e. 800 mV) to
-    a higher value, or
-  - Skip / NOP the `DCDC_GPU_DTM` write so the silicon-side limit
-    stays at its default,
-- then the kernel's `regulator_set_voltage` would actually take effect
-  and we could push past 800 mV without a userspace daemon.
+- exp 022 with DT operating-points = 1000 mV: rail stayed at 800 mV.
+- exp 028 with userspace `echo 850 > /sys/kernel/debug/DCDC_GPU/voltage`:
+  rail held at 850 mV across Mali OPP transitions.
 
-This requires further RE: identifying which DCDC table entry is
-DCDC_GPU and the exact register address vs offset in the `_DTM`
-register that enforces the cap. The strings index the names but the
-values per name are populated by code that reads the `_efuse` / DT
-nodes.
+Both writes go through the same `ops->set_voltage_sel_regmap` callback
+in the SC2730 regulator driver (verified in sc2730-regulator.ko
+disassembly). The difference must be in what happens **before** that
+callback is invoked - either a consumer-side constraint check that
+clamps the request, or a regulator-state-tracking issue that says
+"no change needed" when in fact the rail is currently below target.
+
+This is now a **kernel-side** problem, not a uboot-side problem. The
+right next step is to instrument the kernel's `regulator_set_voltage`
+path (or trace it via ftrace events on the device) to see exactly
+why Mali's request for 850 mV doesn't reach the SPI write. Candidate
+mechanisms:
+
+1. The SC2730 regulator's `regulator_constraints` were seeded by
+   uboot DT to a smaller max than 1596 mV at handover (need to look
+   at the kernel-side DT, not the uboot DT).
+2. A constraint elsewhere in the consumer chain (gpu-supply graph)
+   limits the aggregate max.
+3. The Mali driver itself (or some PM framework code) caches a
+   "current voltage" of 800 mV and short-circuits subsequent calls
+   that ask for higher than current+something.
+
+Patching uboot would not address any of those.
 
 ## Files
 
