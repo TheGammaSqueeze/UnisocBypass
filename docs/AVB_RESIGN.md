@@ -125,3 +125,53 @@ avbtool info_image --image vbmeta.img | grep -A3 'Partition Name:          dtbo'
 - **avbtool "could not open ... key"**: you are using the sandboxed snap
   avbtool on a path it cannot read. Use the vendored `tools/avbtool` (the
   default) or move inputs under `/mnt/c` or `$HOME`.
+
+# Disabling dm-verity (modified system / vendor / product)
+
+Re-signing a chain partition (above) covers `boot`, `vendor_boot`, `dtbo`,
+which use whole-image AVB **hash** descriptors. It does not help with
+`system` / `vendor` / `product` / `socko` / `odmko`, which use **hashtree**
+(dm-verity) descriptors in `vbmeta_system` / `vbmeta_vendor`.
+
+`libavb` emits `androidboot.veritymode=enforcing` from the vbmeta hashtree
+error mode (`avb_cmdline.c`), and this is **independent of the unlock state**
+(unlock only tolerates a bad vbmeta signature; it does not turn off
+dm-verity). So dm-verity runs over those partitions in `restart_on_corruption`
+mode, and any repack of them (even with your own unmodified files) changes the
+hashtree and the kernel reboots on first read. Symptom: `boot.img` boots but a
+custom `system.img`/`vendor.img` reboot-loops with `device-mapper: verity ...
+corruption` in the kernel log.
+
+The fix is to set the hashtree-disabled flag in the top-level vbmeta:
+
+```bash
+python3 tools/avb_disable_verity.py \
+    --vbmeta /path/to/vbmeta.img \
+    --keys-dir keys \
+    -o vbmeta.disabled.img
+# flash vbmeta.disabled.img to vbmeta (and vbmeta_bak)
+```
+
+What it does:
+
+- Rebuilds the vbmeta with `AVB_VBMETA_IMAGE_FLAGS_HASHTREE_DISABLED` (0x1),
+  which makes libavb emit `androidboot.veritymode=disabled` while keeping the
+  rest of the cmdline (vbmeta digest, size, device_state, ...). fs_mgr then
+  mounts system/vendor/product with no dm-verity layer.
+- Preserves every chain partition descriptor exactly, so boot/vendor_boot/dtbo
+  verification is unchanged.
+- Re-signs with the key already trusted by the device, auto-matched from
+  `keys/` against the current top-level vbmeta public key (`rsa4096_vbmeta.pem`).
+- Regenerates the SPRD `sys_img_header` at `partition_size - 0x200` (magic
+  `0x42544844`), whose SHA256 uboot checks in `check_sprdimgheader`; a stale
+  value hangs the boot, so this is not optional.
+
+This disabled vbmeta is **static and content-independent**: it does not depend
+on what you put in system/vendor, so generate it once and keep it in your
+flash package. After it is flashed, any modified system/vendor/product boots.
+
+Do NOT use `--mode verification` (flag 0x2) on this device. With
+`VERIFICATION_DISABLED`, libavb (`avb_slot_verify.c:1452`) deliberately emits
+no `androidboot.*` options; on a dynamic-partition device that yields an empty
+kernel command line and fails to boot. `--mode hashtree` (0x1, the default) is
+the correct choice. `--mode both` is offered only for completeness.

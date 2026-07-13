@@ -110,6 +110,7 @@ the practical performance gain turned out to be small.
 | `tools/modify_uboot.py` | Replace strings in uboot and re-hash in one step |
 | `tools/patch_uboot_unlock.py` | Patch uboot to permanently report unlocked, disable AVB, strip SKIP VERIFY text + delay |
 | `tools/avb_resign_partition.py` | Re-sign a modified chain partition (dtbo/boot/vendor_boot) against the stock vbmeta, auto-selecting the correct key (see [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md)) |
+| `tools/avb_disable_verity.py` | Rebuild vbmeta with dm-verity disabled (re-signed + SPRD wrapper regenerated) so modified system/vendor/product boot (see [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md)) |
 | `tools/avbtool` | Vendored AOSP avbtool 1.3.0 (runs unsandboxed via system python3) |
 
 ## Scripts
