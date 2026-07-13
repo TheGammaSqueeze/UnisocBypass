@@ -43,7 +43,7 @@ Boot behavior:
 - No SKIP VERIFY warning text shown on display
 - No 6-second warning delay
 - No INFO LOCK FLAG IS UNLOCK text shown
-- AVB is skipped (uboot believes bootloader is unlocked, per its own stock "if unlocked, skip verify" branch)
+- AVB runs in tolerant/unlocked mode: hash and key mismatches are ignored, but the dm-verity kernel command line is still generated (see "Why this is enough" below). Modified boot/vbmeta/dtbo boot without re-signing.
 
 ## Usage
 
@@ -84,8 +84,50 @@ adb reboot
 
 (This assumes `scripts/backup.sh` was run before making changes, which creates `backups/uboot_b.bin` from the device.)
 
-## Why AVB is actually skipped
+## Why this is enough (and what "unlocked" really does)
 
-Stock uboot already contains a branch that skips AVB when the bootloader is unlocked. That branch is gated by a call to the lock-state read (our patch 1 forces its output to 1). The stock code path then prints a warning and the SKIP VERIFY text, which our patches 2-6 silence. The AVB skip itself is not something we disable explicitly; we just make the normal unlocked-path behavior happen unconditionally and invisibly.
+On this platform (UMS512 / sharkl5Pro, built with `CONFIG_VBOOT_V2` +
+`CONFIG_VBOOT_SYSTEMASROOT`), being unlocked does **not** mean "skip AVB". It
+means "run AVB in a tolerant mode that ignores hash/key mismatches but still
+produces the kernel command line".
 
-In short: uboot already knows how to skip AVB when unlocked. We just make it believe it is always unlocked, quietly.
+The real AVB pass happens inside TrustOS, reached from
+`vboot_secure_process_flow()` (`sec_common.c:1019-1023`):
+
+```c
+vboot_verify_info->vboot_unlock_status = g_DeviceStatus;   // our patch forces UNLOCK
+uboot_vboot_verify_img(vboot_verify_info, ...);            // SMC into TrustOS
+// TrustOS writes the generated cmdline back into g_sprd_vboot_cmdline:
+//   androidboot.vbmeta.digest=..., androidboot.vbmeta.device_state=unlocked,
+//   androidboot.veritymode=enforcing, ...
+```
+
+Our `0x78c98` patch forces `get_lock_status()` to always set
+`g_DeviceStatus = VBOOT_STATUS_UNLOCK`. TrustOS honours that: for a modified
+`boot`/`dtbo`/`vbmeta` it returns success **and still fills in the dm-verity
+command line**. The kernel needs that command line (the vbmeta digest) or it
+panics. This is exactly how a genuinely-unlocked stock uboot boots with
+modified boot partitions, and we reproduce it bit-for-bit. No image
+re-signing is required.
+
+`patch_uboot_unlock.py` alone is the complete solution.
+
+## Do NOT additionally "bypass" the TrustOS verify calls
+
+There was a `patch_uboot_full_avb_bypass.py` that stubbed the four TrustOS
+SMC wrappers (`uboot_verify_img` 0x82c00, `uboot_vboot_verify_img` 0x82c40,
+`uboot_verify_product_sn_signature` 0x82c90, `uboot_set_root_of_trust`
+0x82cd0) to `mov w0,#0 ; ret`, on the assumption that they were only
+"verify and hang on error" stubs.
+
+That is wrong for `uboot_vboot_verify_img` (0x82c40): it is the SMC that
+**generates** `g_sprd_vboot_cmdline`. Stubbing it leaves the command line
+empty, so the kernel boots with no dm-verity digest, panics, and the device
+drops to recovery/charging (you see `g_sprd_vboot_cmdline is .` in the uboot
+log). That script is now a hard-deprecated no-op that refuses to run.
+
+Symptom that identifies this bug: after flashing, Android asks to wipe
+`/data`, then fails to boot; reflashing stock uboot asks to wipe again and
+then boots fine even with the same modified boot partitions. The wipe prompt
+is the `verifiedbootstate` change; the boot failure is the empty command
+line.

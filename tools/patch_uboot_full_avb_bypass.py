@@ -1,157 +1,83 @@
 #!/usr/bin/env python3
-"""Patch a UMS512 uboot image to short-circuit ALL TOS-side AVB
-verification calls.
+"""DEPRECATED / DO NOT USE -- this patch bricks the boot.
 
-This is the complement to ``patch_uboot_unlock.py``. The unlock patch
-makes uboot believe the bootloader is unlocked, which lets the
-generic Sprd code path skip standard AVB hash compares. But on
-``CONFIG_VBOOT_SYSTEMASROOT`` builds (UMS512 included), the dtbo
-verification is hoisted into ``vboot_secure_process_flow("dtb"/"dtbo")``
-which calls ``uboot_vboot_verify_img`` -- an SMC into TrustOS -- and
-hangs in an infinite loop on any non-zero return. That hang is what
-bricked us when modifying dtbo content.
+Root cause (confirmed against sharkl5Pro u-boot15 source in
+lib/secureboot/common/sec_common.c and lib/trustzone/uboot_drv_api.c):
 
-Source for the affected functions is in
-``lib/trustzone/uboot_drv_api.c`` (line numbers are from the public
-sharkl5Pro u-boot15 source). Each one has the same shape::
+    uboot_vboot_verify_img() (code 0x82c40) is NOT a "verify and hang on
+    error" stub. It is the SMC into TrustOS that runs the real AVB pass
+    AND writes the generated kernel command line back into
+    g_sprd_vboot_cmdline via VbootVerifyInfo->vb_cmdline_addr.
 
-    int uboot_verify_img(unsigned long start_addr, uint32_t lenth)
-    {
-        smc_param *param = tee_common_call(FUNCTYPE_VERIFY_IMG, ...);
-        if (param->a0 != NO_ERROR) {
-            printf("uboot_verify_img() return error:param->a0=%d\\n", ...);
-            while (1);              // <-- the hang
-        }
-        return param->a0;
-    }
+    vboot_secure_process_flow() (sec_common.c:1019-1023) does:
 
-We patch the function prologue itself to ``mov w0, #0 ; ret`` so the
-SMC is never issued and 0 (=NO_ERROR) is always returned. Every
-caller treats this as "verification passed".
+        vboot_verify_info->vboot_unlock_status = g_DeviceStatus;   // UNLOCK
+        uboot_vboot_verify_img(vboot_verify_info, ...);            // <- fills cmdline
+        // g_sprd_vboot_cmdline now holds:
+        //   androidboot.vbmeta.digest=..., androidboot.vbmeta.device_state=unlocked,
+        //   androidboot.veritymode=enforcing, ...
 
-Functions we neuter:
+    On CONFIG_VBOOT_SYSTEMASROOT builds (UMS512 / sharkl5Pro) the uboot-side
+    ALLOW_VERIFICATION_ERROR flag is compiled out (avb_check.c uses
+    "#ifndef CONFIG_VBOOT_SYSTEMASROOT"), so the ONLY thing that both
+    tolerates a modified/mismatched image AND emits the dm-verity cmdline is
+    that TrustOS SMC. TrustOS honours vboot_unlock_status: when it is UNLOCK
+    it returns NO_ERROR for a mismatched boot/dtbo/vbmeta and still produces
+    the cmdline. That is exactly why a genuinely-unlocked stock uboot boots
+    fine with modified boot partitions.
 
-| code offset | symbol                                     | source line |
-|-------------|--------------------------------------------|-------------|
-| 0x82c00     | uboot_verify_img                           | 43          |
-| 0x82c40     | uboot_vboot_verify_img                     | 54          |
-| 0x82c90     | uboot_verify_product_sn_signature          | 64          |
-| 0x82cd0     | uboot_set_root_of_trust                    | 82          |
+    Stubbing uboot_vboot_verify_img() to "mov w0,#0 ; ret" skips the SMC, so
+    g_sprd_vboot_cmdline stays empty (it was memset to 0). The kernel then
+    gets no dm-verity digest, panics, and the device falls back to
+    recovery/charging. That is the failure this script caused.
 
-``uboot_config_os_version`` (line 73 in source) was not found in the
-shipped binary -- its callers were either compiled out or inlined --
-so it isn't patched here.
+The correct fix -- and the whole point of the project -- is:
 
-Encoding details: we replace the first two instructions of each
-function with::
+    tools/patch_uboot_unlock.py ALONE.
 
-    mov  w0, #0     0x52800000
-    ret             0xd65f03c0
+Its 0x78c98 patch forces get_lock_status() to always store
+g_DeviceStatus = VBOOT_STATUS_UNLOCK. Every AVB path (boot, dtb, dtbo,
+vbmeta) then passes vboot_unlock_status = UNLOCK to TrustOS, which tolerates
+the modified images AND generates the cmdline -- no image re-signing needed.
+The four TOS calls this script used to neuter behave on our forced-unlock
+uboot exactly as they do on a stock uboot running on an unlocked device:
 
-The original ``stp x29, x30, [sp, #-N]!`` plus ``mov x3, x0`` are
-clobbered, but since the function returns immediately none of the
-spilled-onto-stack state matters and the caller's link register and
-frame pointer are untouched.
+    0x82c00 uboot_verify_img                 - not on the CONFIG_VBOOT_V2 boot
+                                               path (compiled out at
+                                               sec_common.c:708/713).
+    0x82c40 uboot_vboot_verify_img           - GENERATES the cmdline. Must run.
+    0x82c90 uboot_verify_product_sn_signature- fastboot unlock flow only.
+    0x82cd0 uboot_set_root_of_trust          - runs at boot (loader_nvm.c:1670)
+                                               to hand the Root-of-Trust to
+                                               Keymaster; succeeds when
+                                               unlocked, so no need to stub it.
 
-Prerequisites:
-    - the running uboot must already be the patched-unlock variant
-      from ``tools/patch_uboot_unlock.py`` (this script supplements it)
-    - the SPL must already be the NOPed variant from
-      ``tools/patch_spl.py``
-
-Usage::
-
-    python3 tools/patch_uboot_full_avb_bypass.py <input_uboot.img> <output_uboot.img>
-    python3 tools/patch_uboot_full_avb_bypass.py <input_uboot.img> /dev/null --dry-run
+Keeping this script importable so old pipelines fail loudly instead of
+silently producing a bricking image.
 """
 
-import argparse
-import os
-import struct
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rehash import rehash
+_MSG = __doc__
 
 
-PATCHES = [
-    # code_off  orig_word_0  orig_word_1  new_word_0  new_word_1  description
-    (0x82c00, 0xa9bf7bfd, 0xaa0003e3, 0x52800000, 0xd65f03c0,
-     "uboot_verify_img: prologue -> mov w0,#0 ; ret"),
-    (0x82c40, 0xa9be7bfd, 0xaa0003e3, 0x52800000, 0xd65f03c0,
-     "uboot_vboot_verify_img: prologue -> mov w0,#0 ; ret"),
-    (0x82c90, 0xa9bf7bfd, 0xaa0003e3, 0x52800000, 0xd65f03c0,
-     "uboot_verify_product_sn_signature: prologue -> mov w0,#0 ; ret"),
-    (0x82cd0, 0xa9bf7bfd, 0xaa0003e3, 0x52800000, 0xd65f03c0,
-     "uboot_set_root_of_trust: prologue -> mov w0,#0 ; ret"),
-]
-
-
-def apply_patches(data: bytearray, dry_run: bool = False):
-    if data[0:4] != b"DHTB":
-        raise ValueError("Not a DHTB image")
-    data_size = struct.unpack("<Q", data[0x30:0x38])[0]
-    results = []
-    for code_off, orig_w0, orig_w1, new_w0, new_w1, desc in PATCHES:
-        file_off = 0x200 + code_off
-        if file_off + 8 > 0x200 + data_size:
-            raise ValueError(f"patch offset 0x{code_off:x} past end of code")
-        actual_w0 = struct.unpack_from("<I", data, file_off)[0]
-        actual_w1 = struct.unpack_from("<I", data, file_off + 4)[0]
-        matched = (actual_w0 == orig_w0 and actual_w1 == orig_w1)
-        results.append({
-            "code_off": code_off,
-            "file_off": file_off,
-            "expected_orig": (orig_w0, orig_w1),
-            "actual": (actual_w0, actual_w1),
-            "new": (new_w0, new_w1),
-            "desc": desc,
-            "matched": matched,
-        })
-        if matched and not dry_run:
-            struct.pack_into("<I", data, file_off, new_w0)
-            struct.pack_into("<I", data, file_off + 4, new_w1)
-
-    failed = [r for r in results if not r["matched"]]
-    rh = None
-    if not failed and not dry_run:
-        rh = rehash(data)
-    return results, failed, rh
+def apply_patches(*_args, **_kwargs):
+    raise RuntimeError(
+        "patch_uboot_full_avb_bypass is deprecated: it neuters "
+        "uboot_vboot_verify_img (0x82c40), the TrustOS SMC that generates the "
+        "kernel dm-verity cmdline, which bricks the boot. Use "
+        "tools/patch_uboot_unlock.py alone."
+    )
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("input")
-    p.add_argument("output")
-    p.add_argument("--dry-run", action="store_true",
-                    help="report patch sites without writing output")
-    args = p.parse_args()
-
-    data = bytearray(open(args.input, "rb").read())
-    results, failed, rh = apply_patches(data, args.dry_run)
-
-    for r in results:
-        status = "OK" if r["matched"] else "FAIL"
-        print(f"  [{status}] @ code 0x{r['code_off']:06x} "
-              f"(file 0x{r['file_off']:06x}): {r['desc']}")
-        if not r["matched"]:
-            print(f"        expected {r['expected_orig'][0]:#010x},{r['expected_orig'][1]:#010x}"
-                  f" got {r['actual'][0]:#010x},{r['actual'][1]:#010x}")
-
-    if failed:
-        print("\nABORT: not all patch points matched their expected original "
-               "instruction.")
-        sys.exit(1)
-
-    if args.dry_run:
-        print("\nDry run only, no file written.")
-        sys.exit(0)
-
-    open(args.output, "wb").write(bytes(data))
-    if rh is not None:
-        print(f"\nDHTB sha256 / SIMGHDR hash refreshed.")
-    print(f"wrote {args.output} ({len(data)} bytes)")
+    sys.stderr.write(_MSG + "\n")
+    sys.stderr.write(
+        "REFUSING TO RUN. This patch removes kernel-cmdline generation and "
+        "bricks the boot.\nUse: python3 tools/patch_uboot_unlock.py "
+        "<stock_uboot.img> <patched_uboot.img>\n"
+    )
+    sys.exit(2)
 
 
 if __name__ == "__main__":
