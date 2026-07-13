@@ -25,7 +25,9 @@ BootROM (mask ROM)
     -> SPL RSA-2048 verifies sml, trustos, uboot (4 call sites)
     -> SPL hangs in infinite loop on verification failure
       -> UBoot AVB verifies boot, vendor_boot, dtbo
-      -> UBoot SKIPS AVB when bootloader is unlocked
+      -> when unlocked, boot/vendor_boot mismatches are tolerated, but AVB
+         still runs and generates the dm-verity cmdline; dtbo goes through a
+         TrustOS SMC that hard-fails on mismatch and must be correctly signed
 ```
 
 After running `tools/patch_spl.py`:
@@ -66,6 +68,11 @@ python3 tools/patch_uboot_unlock.py backups/uboot_b.bin unlocked_uboot.img
 # ./scripts/flash_uboot.sh my_modified_uboot.img
 
 adb reboot
+
+# 5. (optional) If you modify an AVB-verified partition such as dtbo, re-sign it
+#    so the bootloader accepts it (dtbo hard-fails on mismatch even when unlocked):
+# python3 tools/avb_resign_partition.py --image dtbo.img --vbmeta vbmeta.img --keys-dir keys
+#    then flash dtbo.img. See docs/AVB_RESIGN.md.
 ```
 
 ## Repo layout
@@ -86,6 +93,7 @@ adb reboot
 - [docs/DHTB_FORMAT.md](docs/DHTB_FORMAT.md) - DHTB header layout
 - [docs/SIMGHDR_FORMAT.md](docs/SIMGHDR_FORMAT.md) - SIMGHDR signature block layout
 - [docs/UBOOT_UNLOCK.md](docs/UBOOT_UNLOCK.md) - uboot permanent-unlock patch
+- [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md) - re-sign a modified dtbo/boot/vendor_boot so the bootloader accepts it
 
 CPU/GPU overclock and undervolt research is parked in [`oc/`](oc/) - kept
 separate because it is not part of the firmware-signing-bypass story and
@@ -101,6 +109,8 @@ the practical performance gain turned out to be small.
 | `tools/verify_image.py` | Check that a DHTB image has a valid hash (integrity test) |
 | `tools/modify_uboot.py` | Replace strings in uboot and re-hash in one step |
 | `tools/patch_uboot_unlock.py` | Patch uboot to permanently report unlocked, disable AVB, strip SKIP VERIFY text + delay |
+| `tools/avb_resign_partition.py` | Re-sign a modified chain partition (dtbo/boot/vendor_boot) against the stock vbmeta, auto-selecting the correct key (see [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md)) |
+| `tools/avbtool` | Vendored AOSP avbtool 1.3.0 (runs unsandboxed via system python3) |
 
 ## Scripts
 

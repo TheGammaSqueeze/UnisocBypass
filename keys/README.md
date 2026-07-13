@@ -81,6 +81,39 @@ avbtool add_hash_footer \
 Use the same recipe for any other partition by substituting the right
 `--partition_name`, `--rollback_index_location`, and `--key`.
 
+### Automated (recommended): `tools/avb_resign_partition.py`
+
+Picking the key by hand is the easy way to brick-loop the device (signing
+`dtbo` with the vbmeta key instead of the boot key). The helper does it
+safely: it reads the expected public key straight out of the reference
+`vbmeta.img` chain descriptor, finds the matching private key in `keys/`,
+preserves the image's footer parameters, re-signs, and verifies. If no local
+key matches the chain descriptor it refuses rather than signing wrong.
+`vbmeta.img` is never modified (a content change to a chain partition does
+not require it).
+
+```bash
+python3 tools/avb_resign_partition.py \
+    --image /path/to/dtbo.img \
+    --vbmeta /path/to/vbmeta.img \
+    --keys-dir keys
+# in place, keeps dtbo.img.bak; use -o to write elsewhere; --dry-run to preview
+
+# Works for any chain partition (boot, vendor_boot, ...):
+python3 tools/avb_resign_partition.py --image boot.img --vbmeta vbmeta.img \
+    --keys-dir keys --partition boot -o boot.signed.img
+```
+
+It runs the repo-vendored `tools/avbtool` with the system `python3`, so it is
+not affected by the `avbtool` snap sandbox (which cannot read paths outside
+`/mnt/c` or `$HOME`). `avbtool` shells out to `openssl`, which must be on PATH.
+
+Why `vbmeta.img` does not change: every partition here is a *chain* partition,
+so `vbmeta.img` stores the signing **key** it expects, not the partition
+**hash**. Re-signing the partition footer with the matching key is all that is
+needed; regenerating `vbmeta.img` would only be required to change which key
+signs a partition, or to add/remove partitions.
+
 ## RSA-2048 keys
 
 `rsa2048_0.pem` and `rsa2048_1.pem` are the SPL/SML/TrustOS/UBoot
