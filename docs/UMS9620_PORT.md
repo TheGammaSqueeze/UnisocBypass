@@ -44,6 +44,29 @@ SPL's verification. Use one of the `unisoc_chipram_signcheck` methods:
 
 Both need the uboot unlock byte-patches, which is the open item.
 
+### magic64 signature-preserving packaging: CONFIRMED WORKING
+
+`tools/magic_pack_ums9620.py` reproduces the `magic64` (Patch-Post-Verification)
+method as a reusable, parameterized packer. It keeps the signed uboot payload
+byte-for-byte (so the stock SPL's RSA check still passes), appends the AArch64
+relocation+patch shellcode and a patch table, moves the SIMGHDR footer, and
+truncates the result back to the partition size (only zero padding is dropped).
+
+Confirmed on hardware (Anbernic T820):
+
+- Load base `0xb5000000` is correct (the header `mImgAddr` is a placeholder
+  `0xaaaaaaaacccccccc`; base derived from BSS/SP literals and the PAC XML image
+  base `0xb4fffe00 + 0x200`). Runtime patch address = load base + code offset.
+- Patch `0xafe8 = 0xd503201f` (nop) removes the `INFO: LOCK FLAG IS : UNLOCK!!!`
+  line and the "press power button" 10s timeout. Device boots, silent and fast.
+- Output MUST be truncated to the uboot partition size (`0x300000` here); a
+  `0x300100`-byte image gets "write flash failed" from the download tool.
+
+Usage:
+
+    python3 tools/magic_pack_ums9620.py uboot_b.img out.img \
+        --patch 0xafe8=0xd503201f [--load-base 0xb5000000]
+
 ### Pinned offsets (resolved via aarch64 objdump + capstone)
 
 Code offsets are relative to the uboot DHTB payload (file offset 0x200 + code
