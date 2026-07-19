@@ -37,6 +37,8 @@ Usage:
 
 Known patches for this uboot (see docs/UMS9620_PORT.md):
     0xafe8=0xd503201f   remove unlock-warning message + 10s power-button timeout
+    0xb2a4=0xd503201f   remove "SKIP VERIFY!!!" warning (UART print)
+    0xb2ac=0xd503201f   remove "SKIP VERIFY!!!" warning (screen print)
     0x604c0=0xd503201f  force get_lock_status = UNLOCK
 """
 
@@ -113,16 +115,17 @@ def pack(data: bytearray, patches, load_base: int) -> bytes:
     if data[0:4] != b"DHTB":
         raise ValueError("not a DHTB image")
     size = struct.unpack_from("<I", data, 0x30)[0]
-    if struct.unpack_from("<I", data, 0x30)[0] == \
-       struct.unpack_from("<I", data, size + 0x210)[0]:
-        raise ValueError("image already magic-patched")
-
-    shell = build_shellcode(size)
 
     foot_off = 0x200 + size
     footer = bytearray(data[foot_off:foot_off + 0x60])
     if footer[0:7] != b"SIMGHDR":
         raise ValueError("SIMGHDR footer not found")
+    # stock footer payload_offset (footer+0x18) is 0x200; magic packing sets it
+    # to 0x210, so that field is a reliable already-packed marker.
+    if struct.unpack_from("<Q", footer, 0x18)[0] != 0x200:
+        raise ValueError("image already magic-patched")
+
+    shell = build_shellcode(size)
 
     # patch_data: [addr, len_words, word...] per entry, then zero terminator
     patch_data = b""

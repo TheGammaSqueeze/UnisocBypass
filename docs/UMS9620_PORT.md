@@ -76,6 +76,15 @@ offset). Values verified against `uboot_b.img`.
 |---|---|---|---|---|
 | remove unlocked-warning message + 10s timeout | `0xafe8` | `54000180` (`b.eq 0xb018`) | `d503201f` (nop) | unlocked device boots silently (skips UART print `0xb020`, screen print `0xb038`, and the 10s power-button countdown `bl 0xae68` at `0xb040`) |
 | force get_lock_status = UNLOCK | `0x604c0` | `35000160` (`cbnz w0, 0x604ec`) | `d503201f` (nop) | always takes the UNLOCK arm (g_DeviceStatus=1, returns 1) |
+| remove `SKIP VERIFY` warning (UART) | `0xb2a4` | `9400a21c` (`bl 0x33b14`) | `d503201f` (nop) | drops the UART print of `WARNNING: LOCK FLAG IS : UNLOCK, SKIP VERIFY!!!` |
+| remove `SKIP VERIFY` warning (screen) | `0xb2ac` | `9401e7a2` (`bl 0x85134`) | `d503201f` (nop) | drops the screen print of the same line |
+
+The `SKIP VERIFY` line comes from a separate status-print function at `0xb238`
+that dispatches on a lock-state global (`adrp 0x260000 ; ldr w0,[x0,#0xd80]`)
+through a jump table (`br x2` at `0xb294`). The unlock case loads the string at
+`0xb5588` (`adrp+add` at `0xb298/0xb29c`) and prints it twice, via `bl 0x33b14`
+(UART) at `0xb2a4` and `bl 0x85134` (screen) at `0xb2ac`. NOPing both bl calls
+suppresses only that line and leaves the jump table intact.
 
 Supporting map:
 - `get_lock_status` = `0x60470`: malloc(476) -> `common_raw_read(productinfo,
