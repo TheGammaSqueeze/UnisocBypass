@@ -24,10 +24,13 @@ Same rationale as the T618 flow: BootROM verifies only the DHTB SHA256, so a
 modified-then-rehashed SPL loads, and the patched SPL no longer RSA-verifies
 anything downstream. See docs/UMS9620_PORT.md for the full port status.
 
-STATUS: SPL side is derived and rehashes cleanly, but it has NOT yet been
-confirmed on a device. The uboot unlock offsets for UMS9620 are not yet
-finalized (see docs/UMS9620_PORT.md), so a patched uboot is still required
-before this yields a usable unlock.
+STATUS: does NOT work on a fused (production) T820. Unlike T618, the T820 SPL
+is cryptographically verified (its DHTB hash is not SHA256(payload) and the
+SIMGHDR carries an RSA cert), so a modified + rehashed SPL is rejected by
+BootROM and the device returns to download mode (confirmed on hardware). This
+tool is kept only for reference / un-fused devices. On a fused T820 you must
+keep the stock SPL and patch the uboot with a signature-preserving method
+(magic64 + difftool, or bsp_sign_fxxker). See docs/UMS9620_PORT.md.
 
 Usage:
     python3 patch_spl_ums9620.py <stock_spl.img> <patched_spl.img>

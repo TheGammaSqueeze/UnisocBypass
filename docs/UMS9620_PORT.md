@@ -4,32 +4,45 @@ Porting the unlock/bypass approach from UMS512 (T618) to UMS9620 (T820).
 This is a work in progress: the SPL side is done, the uboot unlock offsets are
 not yet finalized.
 
-## What carries over unchanged
+## Important: the T618 SPL route does NOT work on a fused T820
 
-- DHTB / SIMGHDR image format is identical, so `tools/rehash.py` works as-is
-  (verified `is_packed=0` on the T820 spl/uboot, so the `data_size` read is
-  correct).
-- The verification bug is in SPL/FDL1 on this SoC (BOOTROM -> SPL/FDL1 -> TOS
-  -> UBOOT), so patching the SPL gives control of TOS and uboot. Only
-  ums9360 / ums9632 relocate verification into POSTROM; ums9620 does not.
+On T618 the DHTB hash is `SHA256(payload)`, so modifying the SPL and rehashing
+is accepted by a hash-only BootROM. On T820 this is false: the stock DHTB hash
+field is not `SHA256(payload)` (or any contiguous range), and the SIMGHDR
+footer carries an RSA cert (exponent `0x10001` + modulus). The T820 SPL is
+cryptographically verified, so a modified + rehashed SPL is rejected and the
+device drops back to download mode (confirmed on hardware).
 
-## SPL: done
+This matches `unisoc_chipram_signcheck`: its patch methods target
+sml/teecfg/trustos/uboot, never the SPL, and it notes SPL/chipram patching
+"only works on un-fused devices." A fused production T820 cannot run a modified
+SPL without the private key.
 
-`tools/patch_spl_ums9620.py`. Unlike the T618 SPL, the T820 SPL does not use
-the uniform `bl / cbz w0,+0x60 / mov w0,#5 / bl` verify pattern. Instead every
-image check goes through one verify dispatcher at code offset `0x045b4`
-(image index in `w0`, returns 0 on pass; 9 call sites, each gating on
-`cbz w0`). The tool neuters that prologue to `movz w0,#0 ; ret` and rehashes,
-so all 9 gates take the success path.
+So the model is inverted vs T618:
 
-```bash
-python3 tools/patch_spl_ums9620.py spl_a.img spl_a_patched.img
-python3 tools/patch_spl_ums9620.py spl_b.img spl_b_patched.img
-```
+- Keep the STOCK signed SPL, do not modify it.
+- Patch the uboot and make it pass the stock SPL's verification with a
+  signature-preserving method (see below), which exploits a flaw in how the
+  SPL verifies uboot (no private key needed).
 
-Not yet confirmed on a device.
+## SPL analysis (kept for reference / un-fused devices only)
 
-## uboot: not finished
+`tools/patch_spl_ums9620.py` neuters the SPL verify dispatcher at code offset
+`0x045b4` (called with an image index in `w0`, returns 0 on pass; 9 cbz-gated
+call sites) to `movz w0,#0 ; ret`. This is structurally correct but only useful
+on an un-fused device where the SPL is hash-only; on a fused device (this one)
+BootROM rejects it. Do not rely on it for a production T820.
+
+## uboot: the actual path on a fused T820
+
+Because the stock SPL must stay in place, a modified uboot has to pass that
+SPL's verification. Use one of the `unisoc_chipram_signcheck` methods:
+
+- `magic64` + `difftool` (Patch-Post-Verification): keep the signed uboot
+  payload intact, append a runtime patcher, signature still verifies.
+- `bsp_sign_fxxker_for_uboot` (Patch-Pre-Verification): fix the uboot cert chain.
+
+Both need the uboot unlock byte-patches, which is the open item.
 
 The T820 uboot is the same Unisoc u-boot15 codebase (identical strings
 "INFO: LOCK FLAG IS : UNLOCK!!!", "WARNNING: LOCK FLAG IS : UNLOCK, SKIP
