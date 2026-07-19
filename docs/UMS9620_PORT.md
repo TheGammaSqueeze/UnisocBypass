@@ -44,6 +44,32 @@ SPL's verification. Use one of the `unisoc_chipram_signcheck` methods:
 
 Both need the uboot unlock byte-patches, which is the open item.
 
+### Pinned offsets (resolved via aarch64 objdump + capstone)
+
+Code offsets are relative to the uboot DHTB payload (file offset 0x200 + code
+offset). Values verified against `uboot_b.img`.
+
+| purpose | code offset | stock | patch to | effect |
+|---|---|---|---|---|
+| remove unlocked-warning message + 10s timeout | `0xafe8` | `54000180` (`b.eq 0xb018`) | `d503201f` (nop) | unlocked device boots silently (skips UART print `0xb020`, screen print `0xb038`, and the 10s power-button countdown `bl 0xae68` at `0xb040`) |
+| force get_lock_status = UNLOCK | `0x604c0` | `35000160` (`cbnz w0, 0x604ec`) | `d503201f` (nop) | always takes the UNLOCK arm (g_DeviceStatus=1, returns 1) |
+
+Supporting map:
+- `get_lock_status` = `0x60470`: malloc(476) -> `common_raw_read(productinfo,
+  476, 0x2000, buf)` (bl `0x3e184`) -> `sprd_sec_verify_lockstatus(buf, 0x40)`
+  (bl `0xb094`) -> `cbnz w0, LOCK` at `0x604c0` -> stores 1/0 to `g_DeviceStatus`.
+- `g_DeviceStatus` global: `[0x111000 + 0x8c8]` (base-independent page).
+- boot-time lock-warning display fn = `0xafc4`: calls `get_lock_status`, reads
+  `g_DeviceStatus`, branches LOCK (`0xaffc`) / UNLOCK-warning (`0xb018`).
+- `read_is_device_unlocked` is AvbOps vtable slot `[ops+0x48]`, called in
+  `avb_append_options` (`~0x67060`, refs "Error getting device lock state").
+
+IMPORTANT: on a fused T820 the SPL RSA-verifies uboot, so modify+rehash of these
+offsets is likely rejected. Package with a signature-preserving method
+(magic64+difftool or bsp_sign_fxxker). The uboot mImgAddr header field is a
+placeholder (0xaaaaaaaacccccccc), so difftool needs the real load base supplied
+separately; the patch runtime address is load_base + the code offset above.
+
 The T820 uboot is the same Unisoc u-boot15 codebase (identical strings
 "INFO: LOCK FLAG IS : UNLOCK!!!", "WARNNING: LOCK FLAG IS : UNLOCK, SKIP
 VERIFY!!!"), so the same unlock idea applies (force `get_lock_status` to report
