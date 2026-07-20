@@ -97,6 +97,7 @@ adb reboot
 - [docs/UBOOT_UNLOCK.md](docs/UBOOT_UNLOCK.md) - uboot permanent-unlock patch
 - [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md) - re-sign a modified dtbo/boot/vendor_boot so the bootloader accepts it
 - [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md) - port to UMS9620/T820: silent unlocked boot via a signature-preserving uboot patch (the SPL cannot be modified on a fused T820)
+- [docs/MAGIC64_EXPLAINED.md](docs/MAGIC64_EXPLAINED.md) - plain-English, blog-style walkthrough of how the signature-preserving `magic64` uboot patch works
 
 CPU/GPU overclock and undervolt research is parked in [`oc/`](oc/) - kept
 separate because it is not part of the firmware-signing-bypass story and
