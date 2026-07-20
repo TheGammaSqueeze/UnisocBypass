@@ -1,6 +1,10 @@
 # UnisocBypass
 
-Developed and verified on the Anbernic RG Vita, which uses the Unisoc T618 SoC.
+Tools and analysis for bypassing Unisoc firmware signature verification to
+unlock and modify the boot chain. The full SPL + uboot flow is developed and
+verified on the Unisoc UMS512 (T618, Anbernic RG Vita); a signature-preserving
+uboot path is also verified on the fused UMS9620 (T820), where the SPL cannot be
+modified (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)).
 
 ## What this does
 
@@ -92,7 +96,7 @@ adb reboot
 - [docs/SIMGHDR_FORMAT.md](docs/SIMGHDR_FORMAT.md) - SIMGHDR signature block layout
 - [docs/UBOOT_UNLOCK.md](docs/UBOOT_UNLOCK.md) - uboot permanent-unlock patch
 - [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md) - re-sign a modified dtbo/boot/vendor_boot so the bootloader accepts it
-- [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md) - port status for UMS9620/T820 (SPL done, uboot in progress)
+- [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md) - port to UMS9620/T820: silent unlocked boot via a signature-preserving uboot patch (the SPL cannot be modified on a fused T820)
 
 CPU/GPU overclock and undervolt research is parked in [`oc/`](oc/) - kept
 separate because it is not part of the firmware-signing-bypass story and
@@ -104,7 +108,7 @@ the practical performance gain turned out to be small.
 |------|---------|
 | `tools/dhtb_parse.py` | Parse and display DHTB header + SIMGHDR fields from any signed Unisoc image |
 | `tools/patch_spl.py` | Patch SPL: NOP all 4 RSA verify call sites and update DHTB/SIMGHDR hashes (UMS512/T618) |
-| `tools/patch_spl_ums9620.py` | Patch UMS9620/T820 SPL: neuter the verify dispatcher (0x045b4) and rehash (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
+| `tools/patch_spl_ums9620.py` | Patch UMS9620/T820 SPL: neuter the verify dispatcher (0x045b4) and rehash. Reference / un-fused devices only; a fused T820 rejects a modified SPL (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
 | `tools/magic_pack_ums9620.py` | Signature-preserving runtime patcher for UMS9620/T820 uboot (magic64 method): keep the signed payload, append shellcode + patch table (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
 | `tools/patch_uboot_unlock_ums9620.py` | Patch UMS9620/T820 uboot for silent unlocked boot (force unlock + strip warning/timeout/SKIP VERIFY), delivered signature-preserving via magic64 |
 | `tools/rehash.py` | Recompute DHTB SHA256 + SIMGHDR data hash for any modified image |
@@ -144,14 +148,34 @@ On first boot after switching from a locked stock state, Android detects the ver
 ## Supported SoCs
 
 Verified working on:
-- UMS512 / T618 (Anbernic RG Vita)
+- UMS512 / T618 (Anbernic RG Vita) - full SPL + uboot patch flow
+- UMS9620 / T820 - silent unlocked boot via a signature-preserving uboot patch
+  (see below and [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md))
 
-The DHTB + SIMGHDR format and SPL verify-call pattern is shared across Unisoc T-series SoCs, so the same approach should work on:
+The DHTB + SIMGHDR format and SPL verify-call pattern is shared across Unisoc T-series SoCs, so the SPL-patch approach should also carry over to:
 - UMS312 / T310
 - UMS9230 / T606, T612, T616
-- UMS9620 / T820
 
 For other SoCs you may need to adjust the SPL verify-call pattern detection in `tools/patch_spl.py` (it currently matches `bl / cbz w0 / mov w0, #5` which is the standard T618 sequence).
+
+### UMS9620 / T820: the SPL route does not apply
+
+A fused (production) T820 cryptographically verifies the SPL, so the T618
+"patch SPL + rehash" trick is rejected and the device drops back to download
+mode. The working path there keeps the stock SPL and delivers the uboot patches
+with a signature-preserving method (`magic64`), which leaves the signed payload
+byte-for-byte intact and applies the edits at runtime. On an already-unlocked
+device this removes the unlock warning text, the boot timeout, and the SKIP
+VERIFY message in one step:
+
+```bash
+# produce a silent unlocked-boot uboot (magic64-packaged, no re-signing needed)
+python3 tools/patch_uboot_unlock_ums9620.py stock_uboot.img unlocked_uboot.img
+# then flash unlocked_uboot.img to the uboot partition
+```
+
+See [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md) for the pinned offsets, the
+`magic64` layout, and why re-signing is neither possible nor needed.
 
 ## Recovery if something goes wrong
 

@@ -1,8 +1,14 @@
 # UMS9620 / T820 port status
 
 Porting the unlock/bypass approach from UMS512 (T618) to UMS9620 (T820).
-This is a work in progress: the SPL side is done, the uboot unlock offsets are
-not yet finalized.
+
+Status: the uboot unlock path is done and confirmed on hardware. Unlike T618,
+the T820 SPL cannot be modified (it is cryptographically verified on a fused
+device), so the model is inverted: keep the stock SPL and deliver the uboot
+patches with the signature-preserving `magic64` method. `tools/patch_uboot_
+unlock_ums9620.py` produces a silent unlocked-boot image in one step
+(force-unlock + strip the warning, timeout, and both SKIP VERIFY prints); the
+shellcode is hand-assembled in pure Python so the output is deterministic.
 
 ## Important: the T618 SPL route does NOT work on a fused T820
 
@@ -38,10 +44,12 @@ Because the stock SPL must stay in place, a modified uboot has to pass that
 SPL's verification. Use one of the `unisoc_chipram_signcheck` methods:
 
 - `magic64` + `difftool` (Patch-Post-Verification): keep the signed uboot
-  payload intact, append a runtime patcher, signature still verifies.
+  payload intact, append a runtime patcher, signature still verifies. This is
+  the method used here (reimplemented in `tools/magic_pack_ums9620.py`).
 - `bsp_sign_fxxker_for_uboot` (Patch-Pre-Verification): fix the uboot cert chain.
 
-Both need the uboot unlock byte-patches, which is the open item.
+The uboot unlock byte-patches these methods need are now pinned (see the table
+below) and packaged by `tools/patch_uboot_unlock_ums9620.py`.
 
 ### magic64 signature-preserving packaging: CONFIRMED WORKING
 
@@ -118,28 +126,20 @@ Supporting map:
 - `read_is_device_unlocked` is AvbOps vtable slot `[ops+0x48]`, called in
   `avb_append_options` (`~0x67060`, refs "Error getting device lock state").
 
-IMPORTANT: on a fused T820 the SPL RSA-verifies uboot, so modify+rehash of these
-offsets is likely rejected. Package with a signature-preserving method
-(magic64+difftool or bsp_sign_fxxker). The uboot mImgAddr header field is a
-placeholder (0xaaaaaaaacccccccc), so difftool needs the real load base supplied
-separately; the patch runtime address is load_base + the code offset above.
+IMPORTANT: on a fused T820 the SPL RSA-verifies uboot, so a modify+rehash of
+these offsets is rejected (confirmed on hardware). The offsets above are
+therefore delivered with the signature-preserving `magic64` packer, not written
+into the payload. The uboot `mImgAddr` header field is a placeholder
+(`0xaaaaaaaacccccccc`); the real load base is `0xb5000000` (confirmed on
+hardware) and the patch runtime address is `load base + code offset`.
 
-The T820 uboot is the same Unisoc u-boot15 codebase (identical strings
+The T820 uboot is the same Unisoc u-boot15 codebase as T618 (identical strings
 "INFO: LOCK FLAG IS : UNLOCK!!!", "WARNNING: LOCK FLAG IS : UNLOCK, SKIP
-VERIFY!!!"), so the same unlock idea applies (force `get_lock_status` to report
-unlocked; force verifiedbootstate). But the build's register/offset layout
-differs from T618, and the exact patch sites are not yet pinned. Anchors found
-so far (offsets in the `uboot_b` image):
-
-- INFO_UNLOCK string refs at `0xb130` / `0xb158` / `0xb194`, SKIP_VERIFY ref at
-  `0xb3d4`.
-- Lock-status display reads `g_DeviceStatus`-area global via
-  `adrp x,0x299000 ; ldr w,[x,#0x740] ; cmp #1` at `0xb1b0`; nearby flag
-  struct is written at `0x1b5bc` (`#0x738`) and `0x639c4` (`#0x73c`).
-
-Still needed: the `get_lock_status` cbz->b site and the verifiedbootstate site,
-which require manual tracing of `sprd_sec_verify_lockstatus`'s caller plus an
-on-device test round.
+VERIFY!!!"), but its register/offset layout differs, so the offsets were
+re-derived from scratch (aarch64 objdump + capstone) rather than reused from
+T618. All four patch sites in the table above are pinned and verified; the
+unlock tool bitmask-checks each one against the stock instruction so a
+different UMS9620 build aborts instead of being mis-patched.
 
 ## Re-signing: not possible, not needed
 
