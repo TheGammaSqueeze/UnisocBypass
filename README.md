@@ -107,6 +107,8 @@ the practical performance gain turned out to be small.
 | `tools/dhtb_parse.py` | Parse and display DHTB header + SIMGHDR fields from any signed Unisoc image |
 | `tools/patch_spl.py` | Patch SPL: NOP all 4 RSA verify call sites and update DHTB/SIMGHDR hashes (UMS512/T618) |
 | `tools/patch_spl_ums9620.py` | Patch UMS9620/T820 SPL: neuter the verify dispatcher (0x045b4) and rehash (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
+| `tools/magic_pack_ums9620.py` | Signature-preserving runtime patcher for UMS9620/T820 uboot (magic64 method): keep the signed payload, append shellcode + patch table (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
+| `tools/patch_uboot_unlock_ums9620.py` | Patch UMS9620/T820 uboot for silent unlocked boot (force unlock + strip warning/timeout/SKIP VERIFY), delivered signature-preserving via magic64 |
 | `tools/rehash.py` | Recompute DHTB SHA256 + SIMGHDR data hash for any modified image |
 | `tools/verify_image.py` | Check that a DHTB image has a valid hash (integrity test) |
 | `tools/modify_uboot.py` | Replace strings in uboot and re-hash in one step |

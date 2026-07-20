@@ -67,6 +67,29 @@ Usage:
     python3 tools/magic_pack_ums9620.py uboot_b.img out.img \
         --patch 0xafe8=0xd503201f [--load-base 0xb5000000]
 
+The shellcode is hand-assembled in pure Python (no binutils dependency), so the
+output is byte-for-byte deterministic and reproducible across machines.
+
+### One-step unlock tool (parity with the T618 `patch_uboot_unlock.py`)
+
+`tools/patch_uboot_unlock_ums9620.py` wraps the packer to give the same
+user-visible result as the T618 unlock tool: the device reports unlocked and
+boots with no warning text and no timeout. It applies all four patches at once:
+
+    0x604c0  cbnz w0 -> nop   get_lock_status always reports UNLOCK
+    0xafe8   b.eq   -> nop    remove INFO_UNLOCK line + 10s timeout
+    0xb2a4   bl     -> nop    remove SKIP_VERIFY line (UART)
+    0xb2ac   bl     -> nop    remove SKIP_VERIFY line (screen)
+
+Like the T618 tool, each patch point is bitmask-verified against the stock
+instruction before anything is written (masks ignore only branch targets /
+condition-branch offsets that legitimately drift between builds), so a
+different UMS9620 build that no longer matches is rejected rather than silently
+mis-patched. Confirmed on hardware with the 0xafe8/0xb2a4/0xb2ac subset.
+
+    python3 tools/patch_uboot_unlock_ums9620.py uboot_b.img out.img
+    python3 tools/patch_uboot_unlock_ums9620.py uboot_b.img --dry-run
+
 ### Pinned offsets (resolved via aarch64 objdump + capstone)
 
 Code offsets are relative to the uboot DHTB payload (file offset 0x200 + code

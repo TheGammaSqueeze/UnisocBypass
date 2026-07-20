@@ -28,8 +28,8 @@ LOAD_BASE default 0xb5000000 was confirmed on hardware for this uboot (the
 payload text base; PAC XML image base 0xb4fffe00 + 0x200 header). If a different
 build relocates elsewhere, pass --load-base.
 
-Requires aarch64-linux-gnu-as / -ld / -objcopy (binutils) to assemble the
-size-dependent shellcode.
+The shellcode is assembled in pure Python (no binutils dependency), so the
+output is byte-for-byte deterministic across machines.
 
 Usage:
     python3 tools/magic_pack_ums9620.py <orig_uboot.img> <out.img> \
@@ -44,71 +44,50 @@ Known patches for this uboot (see docs/UMS9620_PORT.md):
 
 import argparse
 import struct
-import subprocess
 import sys
-import tempfile
 
-AS = "aarch64-linux-gnu-as"
-LD = "aarch64-linux-gnu-ld"
-OC = "aarch64-linux-gnu-objcopy"
 DEFAULT_LOAD_BASE = 0xB5000000
 ADD_LENGTH = 0x100        # (0x10 + 0x70 shellcode + 0xFF) & ~0xFF
 
+# The magic64 relocation+patch shellcode is a fixed 28-instruction (0x70) AArch64
+# routine (from unisoc_chipram_signcheck's magic64.cpp). Only six words depend on
+# the payload size; the rest are constant. This template is the constant form
+# (taken from a size=0x100000 build); the size-dependent slots are overwritten by
+# build_shellcode(). Hand-assembling in Python keeps the output deterministic and
+# avoids a binutils dependency. Slot map (word index -> what it encodes):
+#   0  : adrp x9, label_init(=payload base)   depends on link pc = size+0x10
+#   2  : movz x11, #hi16(size/8), lsl #16
+#   3  : movk x11, #lo16(size/8)
+#   13 : adrp x9, label_patch(=size+0x80)     depends on link pc = size+0x44
+#   14 : add  x9, x9, #((size+0x80) & 0xfff)
+#   27 : b .-(size+0x7c)                       jump back to the real _start
+_SHELLCODE_TEMPLATE = [
+    0x90000009, 0x9100412a, 0xd2a0004b, 0xf280000b, 0xd280000c, 0xeb0b018d,
+    0x540000e2, 0xf86c794d, 0xf82c792d, 0xd508711f, 0xd5033fdf, 0x9100058c,
+    0x17fffff9, 0x90000009, 0x91020129, 0xb840452a, 0xb400016a, 0xb840452b,
+    0xd280000c, 0xeb0b018d, 0x54ffff62, 0xb840452d, 0xb800454d, 0xd508711f,
+    0xd5033fdf, 0x9100058c, 0x17fffff9, 0x17fbffe1,
+]
+
+
+def _adrp(rd: int, pc: int, target: int) -> int:
+    """Encode `adrp Xrd, <target>` executed at address `pc`."""
+    imm = ((target & ~0xFFF) - (pc & ~0xFFF)) >> 12
+    return 0x90000000 | ((imm & 3) << 29) | (((imm >> 2) & 0x7FFFF) << 5) | rd
+
 
 def build_shellcode(size: int) -> bytes:
-    """Assemble the magic64 relocation+patch shellcode for a given payload size."""
-    asm = f""".section .text
-.globl _start
-_start :
-ADRP X9, label_init
-ADD X10, X9, #0x10
-MOV X11, #{(size // 8) & 0xFFFF0000}
-MOVK X11, #{(size // 8) & 0xFFFF}
-MOV X12, #0
-SUBS X13, X12, X11
-B.CS . + 0x1C
-LDR X13, [X10,X12,LSL#3]
-STR X13, [X9,X12,LSL#3]
-IC IALLUIS
-ISB
-ADD X12, X12, #1
-B . - 0x1C
-ADRP X9, label_patch
-ADD X9, X9, #{(size + 0x80) & 0xFFF}
-LDR W10, [X9],#4
-CBZ X10, . + 0x2C
-LDR W11, [X9],#4
-MOV X12, #0
-SUBS X13, X12, X11
-B.CS . - 0x14
-LDR W13, [X9],#4
-STR W13, [X10],#4
-IC IALLUIS
-ISB
-ADD X12, X12, #1
-B . - 0x1C
-B . - {size + 0x7C}
-"""
-    lds = f"""OUTPUT_FORMAT("elf64-littleaarch64")
-OUTPUT_ARCH(aarch64)
-ENTRY(_start)
-SECTIONS {{
- . = 0x{size + 0x10:x};
- .text : {{ *(.text*) }}
- PROVIDE(label_init = 0);
- PROVIDE(label_patch = 0x{size + 0x80:x});
-}}
-"""
-    t = tempfile.mkdtemp()
-    open(f"{t}/m.s", "w").write(asm)
-    open(f"{t}/m.lds", "w").write(lds)
-    subprocess.check_call([AS, "-o", f"{t}/m.o", f"{t}/m.s"])
-    subprocess.check_call([LD, "-o", f"{t}/m.elf", "-T", f"{t}/m.lds", f"{t}/m.o"])
-    subprocess.check_call([OC, "-O", "binary", f"{t}/m.elf", f"{t}/m.bin"])
-    shell = open(f"{t}/m.bin", "rb").read()
-    if len(shell) != 0x70:
-        raise RuntimeError(f"shellcode length 0x{len(shell):x} != 0x70")
-    return shell
+    """Build the magic64 relocation+patch shellcode for a given payload size."""
+    n = size // 8
+    w = list(_SHELLCODE_TEMPLATE)
+    w[0] = _adrp(9, size + 0x10, 0)
+    w[2] = 0xD2A00000 | (((n >> 16) & 0xFFFF) << 5) | 11
+    w[3] = 0xF2800000 | ((n & 0xFFFF) << 5) | 11
+    w[13] = _adrp(9, size + 0x44, size + 0x80)
+    w[14] = 0x91000000 | (((size + 0x80) & 0xFFF) << 10) | 0x129
+    off = -(size + 0x7C)
+    w[27] = 0x14000000 | ((off >> 2) & 0x3FFFFFF)
+    return struct.pack("<28I", *w)
 
 
 def pack(data: bytearray, patches, load_base: int) -> bytes:
