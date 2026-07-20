@@ -1,6 +1,6 @@
 # UMS512 chain of trust
 
-How the Unisoc UMS512 boot chain verifies each stage, and where the holes are.
+How the Unisoc UMS512 boot chain verifies each stage.
 
 ## Stage 0: BootROM
 
@@ -15,9 +15,6 @@ Responsibilities:
 **Verification performed:** DHTB SHA256 hash only. The BootROM does NOT verify the SIMGHDR RSA signature, because the secure-boot efuse is not blown on consumer UMS512 parts.
 
 With a secure-boot-blown efuse, BootROM would additionally check the SIMGHDR RSA signature against a key whose hash is burned into the efuse. This would prevent any SPL modification regardless of hash validity.
-
-**Vulnerabilities:**
-- [CVE-2022-38694](https://research.nccgroup.com/2022/09/02/theres-another-hole-in-your-soc-unisoc-rom-vulnerabilities/) - stack buffer overflow in USB download mode handler, allows arbitrary code execution at BootROM privilege level.
 
 ## Stage 1: SPL (Secondary Program Loader)
 

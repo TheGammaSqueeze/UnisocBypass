@@ -1,7 +1,5 @@
 # UnisocBypass
 
-Tools and analysis for bypassing Unisoc UMS512 (T618) firmware signature verification.
-
 Developed and verified on the Anbernic RG Vita, which uses the Unisoc T618 SoC.
 
 ## What this does
@@ -137,7 +135,7 @@ Use `scripts/flash_spl.sh` and `scripts/flash_uboot.sh`, which write to eMMC via
 
 **Option B - stock locked device**
 
-Use `spd_dump` with the included FDL files in `fdl/` to flash while the BootROM exploit (CVE-2022-38694) is active. See `fdl/README.md` for the exact command. No prior unlock is required.
+Use `spd_dump` with the included FDL files in `fdl/`. See `fdl/README.md` for the exact command. No prior unlock is required.
 
 After the patched SPL + patched uboot are installed (via either method), the device permanently reports as unlocked on every boot, and all downstream signature checks are skipped.
 
@@ -161,7 +159,7 @@ If a patched SPL somehow fails to boot:
 
 1. Power off the device completely
 2. Hold volume down + connect USB to enter download mode
-3. Use `spd_dump` with the CVE-2022-38694 exploit to flash the stock SPL back:
+3. Use `spd_dump` to flash the stock SPL back:
 ```bash
 spd_dump --wait 300 exec_addr 0x3ee8 \
   fdl fdl1-dl.bin 0x5500 \
@@ -170,11 +168,6 @@ spd_dump --wait 300 exec_addr 0x3ee8 \
 ```
 
 **Important:** Always keep a stock SPL backup. `scripts/backup.sh` creates one automatically.
-
-## Credits
-
-- NCC Group for the original CVE-2022-38694 BootROM vulnerability research: https://research.nccgroup.com/2022/09/02/theres-another-hole-in-your-soc-unisoc-rom-vulnerabilities/
-- TomKing062 for the Unisoc unlock tool: https://github.com/TomKing062/CVE-2022-38694_unlock_bootloader
 
 ## License
 

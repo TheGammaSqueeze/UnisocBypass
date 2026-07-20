@@ -22,8 +22,7 @@ So the model is inverted vs T618:
 
 - Keep the STOCK signed SPL, do not modify it.
 - Patch the uboot and make it pass the stock SPL's verification with a
-  signature-preserving method (see below), which exploits a flaw in how the
-  SPL verifies uboot (no private key needed).
+  signature-preserving method (see below), which SPL verifies uboot (no private key needed).
 
 ## SPL analysis (kept for reference / un-fused devices only)
 

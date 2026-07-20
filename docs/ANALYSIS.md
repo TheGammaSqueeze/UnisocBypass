@@ -51,7 +51,7 @@ Then loads each partition and verifies it:
 0xa3b4  ...                            ; success path
 ```
 
-The address `0x5500` is the SRAM address where the BootROM loads SPL's own DHTB image (confirmed from the CVE-2022-38694 tool's `spd_dump` command line: `fdl fdl1-dl.bin 0x5500`).
+The address `0x5500` is the SRAM address where the BootROM loads SPL's own DHTB image (confirmed from the tool's `spd_dump` command line: `fdl fdl1-dl.bin 0x5500`).
 
 ## Error handler at 0x9fb8
 
@@ -163,13 +163,13 @@ No RSA verification happens in BootROM on this chip. This was empirically confir
 
 This is because the secure-boot efuse is not blown on these consumer devices. With the efuse set, BootROM would additionally verify the SIMGHDR RSA signature against a key stored in the efuse and would reject any modified SPL regardless of hash.
 
-## Why the CVE-2022-38694 tool's `gen_spl-unlock` bricks when flashed directly
+## Why the tool's `gen_spl-unlock` bricks when flashed directly
 
 The tool NOPs the four verify sites correctly, but it:
 1. Leaves the DHTB hash pointing at the unmodified code's hash
 2. Truncates the SIMGHDR from 1172 bytes to 692 bytes
 
-Problem (1) causes BootROM to reject the image. The tool was designed to run the patched SPL in RAM via the BootROM USB exploit (where BootROM verification is bypassed by the exploit itself), then write it back only after unlocking. It was never designed to be flashed directly.
+Problem (1) causes BootROM to reject the image. The tool was designed to run the patched SPL in RAM via the BootROM USB (where BootROM verification is bypassed), then write it back only after unlocking. It was never designed to be flashed directly.
 
 This repo fixes both problems: we update the DHTB hash after NOPing and preserve the full SIMGHDR.
 

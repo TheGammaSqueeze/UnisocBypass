@@ -4,7 +4,7 @@ Walkthrough of using this repo to permanently enable modified uboot on a UMS512 
 
 ## Prerequisites
 
-1. The device must already be bootloader-unlocked (`ro.boot.flash.locked = 0`, `verifiedbootstate = orange`). If not, run the CVE-2022-38694 unlock first.
+1. The device must already be bootloader-unlocked (`ro.boot.flash.locked = 0`, `verifiedbootstate = orange`). If not, run the unlock first.
 2. `adb` with root access.
 3. Python 3.6 or later.
 
@@ -112,7 +112,7 @@ adb reboot
 If something goes wrong after flashing a modified SPL:
 
 - Cold boot (fully power cycle): if the SPL has a valid DHTB hash and is otherwise functional, it will boot.
-- If the SPL is broken: hold volume down while connecting USB to enter BootROM download mode, then use `spd_dump` with the CVE-2022-38694 exploit to restore the stock SPL from `backups/mmcblk0boot0.bin`.
+- If the SPL is broken: hold volume down while connecting USB to enter BootROM download mode, then use `spd_dump` to restore the stock SPL from `backups/mmcblk0boot0.bin`.
 
 If something goes wrong after flashing a modified uboot:
 

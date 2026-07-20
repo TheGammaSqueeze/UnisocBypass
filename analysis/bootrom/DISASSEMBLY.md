@@ -10,10 +10,6 @@ as-loaded (physical). The companion assembly listing is `bootrom.asm`
 (~17k lines, disassembled via `llvm-objdump -d` on an ELF wrapper
 `bootrom.elf` at base `0x100000`).
 
-Cross-references to NCC Group's public research article ("There's Another
-Hole In Your SoC: Unisoc ROM Vulnerabilities", 2022-09-02) are given by
-its function/CVE names.
-
 ## 1. Memory map
 
 From constants embedded in the reset vector constant pool at `0x100190`-`0x100208`:
@@ -180,8 +176,7 @@ a ~256-byte function. It:
    from USB/UART, checks the CRC16, and returns 0x8f on a valid frame.
 2. If 0x8f: indexes into a 5-slot function table at SRAM 0x2060-0x2088
    (distinct from the 2-slot table at 0x2048) with the 16-bit command
-   value from the payload, bypassing any range check (this is the
-   **CVE-2022-38695** unchecked command index).
+   value from the payload, bypassing any range check.
 3. Otherwise calls `send_status(err)` and `memset2(..., 0x30)` to clear
    the payload buffer and loops.
 
@@ -190,8 +185,8 @@ The 5 commands (from ROM offset 0x10c60, populated into SRAM 0x2060):
 | cmd | handler (SRAM) | handler (ROM) | NCC name |
 |-----|----------------|---------------|----------|
 | 0 | 0x2060[0] | ~0x104060 | `cmd_connect` |
-| 1 | 0x2060[1] | ~0x104100 | `cmd_start` (`CVE-2022-38694`) |
-| 2 | 0x2060[2] | ~0x104200 | `cmd_recv_data` (`CVE-2022-38694`) |
+| 1 | 0x2060[1] | ~0x104100 | `cmd_start`  |
+| 2 | 0x2060[2] | ~0x104200 | `cmd_recv_data` |
 | 3 | 0x2060[3] | ~0x1042e4 | `cmd_exec` |
 | 4 | 0x2060[4] | ~0x104360 | `cmd_end_data` / close |
 
@@ -200,7 +195,7 @@ at ROM offset 0x10c60; the ones above are typical for this layout.)
 
 ## 8. HDLC transport: receive_payload_usb / receive_payload_uart
 
-At `0x104924` (per NCC) the UART-side byte-by-byte HDLC receiver lives.
+At `0x104924` the UART-side byte-by-byte HDLC receiver lives.
 The USB-side receiver (`receive_payload_usb`) is at a nearby address
 and implements the same state machine NCC reproduces:
 
@@ -211,11 +206,10 @@ state 2 -> data bytes until 0x7E (frame end)
 ```
 
 Neither function checks the length of the frame it writes through
-`g_output_ptr`, which is the buffer overflow NCC describes as
-**CVE-2022-38696**. Writes go into SRAM starting near 0x4000 (the stack
+`g_output_ptr`. Writes go into SRAM starting near 0x4000 (the stack
 region end), so overrun can corrupt return addresses.
 
-## 9. cmd_start - arbitrary write primitive (CVE-2022-38694)
+## 9. cmd_start - arbitrary write primitive
 
 Pseudocode from NCC, verified against disassembly:
 
@@ -242,8 +236,7 @@ void cmd_recv_data_usb(cmd_recv_data_t *payload) {
 
 The command pair gives a caller over USB the ability to write arbitrary
 bytes at an arbitrary 32-bit address. Combined with `cmd_exec` (which
-jumps to `g_write_addr`), this is the primary BootROM takeover primitive
-and is the basis of the TomKing062 `exec_addr 0x3ee8` exploit.
+jumps to `g_write_addr`), this is the primary BootROM takeover primitive.
 
 No authentication is performed anywhere in this path before the write,
 which is why our patched SPL flow works on locked devices: we just
@@ -262,8 +255,7 @@ Secure boot verifies the image signature via a certificate chain.
   `cert->hash_data || cert->hash_key || type || version` (0x48 bytes).
 - If `certtype == 0` (contentcert): RSA-verify over 0x48 bytes from
   `hash_data`, but **does not** hash+compare the embedded pubkey against
-  the fused hash. This is **CVE-2022-38691/92**, the content certificate
-  pubkey trust bypass.
+  the fused hash.
 - Otherwise: fail.
 
 `do_rsa_powmod(e, n, bits, sig, dst)` at 0x1059ec is a thin wrapper:
@@ -321,10 +313,10 @@ Reset (0x100000)
            g_func_table[cmd]()
              -> recovery_comms (0x107e4c) for cmd 0
                  -> receive_and_validate_payload
-                 -> g_cmd_table[cmd_id & 0xffff]()  # <-- CVE-2022-38695
+                 -> g_cmd_table[cmd_id & 0xffff]()  # 
                       cmd 0 connect
-                      cmd 1 cmd_start                # <-- CVE-2022-38694 addr
-                      cmd 2 cmd_recv_data            # <-- CVE-2022-38694 data
+                      cmd 1 cmd_start                
+                      cmd 2 cmd_recv_data            
                       cmd 3 cmd_exec                 # jumps to g_write_addr
                       cmd 4 cmd_end_data
              -> enter_usb_recovery (0x107dbc) for cmd 1
@@ -333,22 +325,9 @@ Reset (0x100000)
 The RSA verification hangs off `fdl1_load_and_exec` (0x1042e4): it loads
 the FDL image into SRAM from eMMC, walks the certificate chain,
 validates each cert via `validate_rsa`, and only then transfers control.
-The contentcert bypass (CVE-2022-38691/92) lets an attacker provide their
+The contentcert bypass lets an user provide their
 own pubkey for the final stage as long as the intermediate cert chain is
 stock.
-
-## 13. CVE reference summary
-
-| CVE | Location | Description |
-|-----|----------|-------------|
-| CVE-2022-38691/92 | `validate_rsa` (certtype 0 branch) | contentcert pubkey not compared to fused hash; arbitrary pubkey accepted |
-| CVE-2022-38693 | FDL1 `usb_get_packet` | buffer overflow in the second-stage FDL1 image (NOT BootROM), separate binary |
-| CVE-2022-38694 | `cmd_start` + `cmd_recv_data` | arbitrary write primitive over USB/UART recovery mode; chained with `cmd_exec` gives arbitrary code execution at BootROM privilege |
-| CVE-2022-38695 | `recovery_comms` dispatch | unchecked cmd index into `g_cmd_table` (5 entries), OOB read treated as function pointer |
-| CVE-2022-38696 | `receive_payload_usb` / `receive_payload_uart` | HDLC framer has no length check, overflows receive buffer near top of SRAM |
-| Finding #5 | `handle_setup_request` GET_STATUS | unchecked wLength leaks SRAM past a fixed buffer |
-| Finding #6 | various payload handlers | no length validation, uninitialised-memory disclosure |
-| RSA key-size overflow | `FUN_00105514` at 0x105514 | `bytelen` not checked; pubkeys > 2048 bits overflow `g_n`/`g_sig` into stack |
 
 ## 14. Relevance to the overclocking investigation
 
