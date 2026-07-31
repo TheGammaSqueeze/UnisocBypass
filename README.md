@@ -98,6 +98,7 @@ adb reboot
 - [docs/AVB_RESIGN.md](docs/AVB_RESIGN.md) - re-sign a modified dtbo/boot/vendor_boot so the bootloader accepts it
 - [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md) - port to UMS9620/T820: silent unlocked boot via a signature-preserving uboot patch (the SPL cannot be modified on a fused T820)
 - [docs/MAGIC64_EXPLAINED.md](docs/MAGIC64_EXPLAINED.md) - plain-English, blog-style walkthrough of how the signature-preserving `magic64` uboot patch works
+- [docs/SLOT_B_CHAINLOAD.md](docs/SLOT_B_CHAINLOAD.md) - design notes for an optional "hold VOLUME-UP to chainload a second u-boot from slot B" feature, delivered via magic64 (design only, not hardware-tested)
 
 CPU/GPU overclock and undervolt research is parked in [`oc/`](oc/) - kept
 separate because it is not part of the firmware-signing-bypass story and
@@ -111,6 +112,7 @@ the practical performance gain turned out to be small.
 | `tools/patch_spl.py` | Patch SPL: NOP all 4 RSA verify call sites and update DHTB/SIMGHDR hashes (UMS512/T618) |
 | `tools/patch_spl_ums9620.py` | Patch UMS9620/T820 SPL: neuter the verify dispatcher (0x045b4) and rehash. Reference / un-fused devices only; a fused T820 rejects a modified SPL (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
 | `tools/magic_pack_ums9620.py` | Signature-preserving runtime patcher for UMS9620/T820 uboot (magic64 method): keep the signed payload, append shellcode + patch table (see [docs/UMS9620_PORT.md](docs/UMS9620_PORT.md)) |
+| `tools/chainload_slotb_ums9620.py` | Example: build a slot-A uboot that chainloads slot B when VOLUME-UP is held, delivered via magic64 (design example, not hardware-tested; see [docs/SLOT_B_CHAINLOAD.md](docs/SLOT_B_CHAINLOAD.md)) |
 | `tools/patch_uboot_unlock_ums9620.py` | Patch UMS9620/T820 uboot for silent unlocked boot (force unlock + strip warning/timeout/SKIP VERIFY), delivered signature-preserving via magic64 |
 | `tools/rehash.py` | Recompute DHTB SHA256 + SIMGHDR data hash for any modified image |
 | `tools/verify_image.py` | Check that a DHTB image has a valid hash (integrity test) |
